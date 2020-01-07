@@ -1,0 +1,31 @@
+Package: gembox
+Type: Package
+Title: In-house toolbox for genome-scale metabolic modeling (GEM) for the Ruppin Lab
+Version: 0.1.0
+Author: Kuoyuan Cheng
+Maintainer: Kuoyuan Cheng <yourself@somewhere.net>
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Depends:
+    Matrix,
+    data.table
+Imports:
+    Rcplex2,
+    stringr,
+    parallel,
+    igraph
+LinkingTo:
+    Rcpp,
+    RcppArmadillo
+Suggests:
+    R.matlab,
+    sybilSBML,
+    rlist,
+    fgsea,
+    hypergraph,
+    hyperdraw,
+    RColorBrewer,
+    visNetwork
