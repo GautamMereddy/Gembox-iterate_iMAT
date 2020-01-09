@@ -6,13 +6,13 @@ prep.model.for.fca <- function(model, nc=1L, lp.pars=list()) {
 
   lp.pars <- get.pars("lp", lp.pars)
   model <- convert.rev.rxns(model)
-  rm.blocked.rxns(model, nc=nc, lp.pars=lp.pars)
+  rm.blocked.rxns(model, nc=nc, solv.pars=lp.pars)
 }
 
 fca <- function(model, rxn0, rxn1, prep.model=FALSE, nc=1L, lp.pars=list()) {
   # flux coupling analysis for a single pair of reactions; the formalization is rxn1/rxn0 (i.e. normalized by rxn0)
   # prep.model: whether to run prep.model.for.fca(); by default the model should already be properly prepared
-  
+
   lp.pars <- get.pars("lp", lp.pars)
   if (prep.model) model <- prep.model.for.fca(model, nc, lp.pars)
   # formalize fca model
@@ -31,11 +31,11 @@ fca <- function(model, rxn0, rxn1, prep.model=FALSE, nc=1L, lp.pars=list()) {
   model$ub <- c(model$ub, 1e20)
   model$rowlb <- c(model$rowlb, rep(-1e20, n.trxns))
   model$rowub <- c(model$rowub, rep(0, n.trxns))
-  
+
   # run
-  rmax <- get.opt.flux(model, rxn1, lp.pars=lp.pars)
-  rmin <- get.opt.flux(model, rxn1, dir="min", lp.pars=lp.pars)
+  rmax <- get.opt.flux(model, rxn1, solv.pars=lp.pars)
+  rmin <- get.opt.flux(model, rxn1, dir="min", solv.pars=lp.pars)
   c(rmin=rmin, rmax=rmax)
-} 
+}
 
 

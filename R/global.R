@@ -20,7 +20,7 @@
 .pkg.const$qp <- list()
 .pkg.const$qp$rcplex <- list(trace=0, maxcalls=2e4, tilim=120, threads=1, parallel.mode=1, nsol=1)
 .pkg.const$mip <- list()
-.pkg.const$mip$rcplex <- list(trace=1, maxcalls=2e4, tilim=1200, threads=1, parallel.mode=1, nsol=1, round=1)
+.pkg.const$mip$rcplex <- list(trace=1, maxcalls=2e4, tilim=1200, threads=1, parallel.mode=1, nodesel=0, epagap=1e-6, epgap=1e-4, nsol=1, solnpoolagap=0, solnpoolgap=0, solnpoolintensity=2)
 # sampling parameters
 .pkg.const$samp <- list(method="achr", n.sample=5e3, steps.per.pnt=400, n.warmup=5000, nc=1L)
 # parameters for various algorithms

@@ -343,18 +343,17 @@ add.rxn <- function(model, rxn, mets, coefs, lb, ub, rule="0", rxnName=rxn, subS
   model
 }
 
-set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1L, lp.pars=list()) {
+set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1L, solv.pars=get.pars("lp", list())) {
   # set the lb's and ub's of reactions, given as indices or IDs as in model$rxns
   # to set only lb's or only ub's, pass the other argument as NULL
   # relative: if TRUE, lb's and ub's will be set to v_max*lbs and v_max*ubs, respectively; in the case of reversible reactions (actual v_min<0), lb's will be set to v_min*lbs (v_min and v_max determined by FVA)
-  # nc: number of cores passed to get.opt.fluxes(); lp.pars: parameters for LP passed to get.opt.fluxes()
-  lp.pars <- get.pars("lp", lp.pars)
+  # nc: number of cores passed to get.opt.fluxes(); solv.pars: solver parameters passed to get.opt.fluxes(), by default LP
 
   x <- all2idx(model, rxns)
   if (relative) {
-    vmaxs <- get.opt.fluxes(model, x, "max", nc, lp.pars)
+    vmaxs <- get.opt.fluxes(model, x, "max", nc, solv.pars)
     if (!is.null(lbs)) {
-      vmins <- get.opt.fluxes(model, x, "min", nc, lp.pars)
+      vmins <- get.opt.fluxes(model, x, "min", nc, solv.pars)
       model$lb[x] <- lbs * ifelse(vmins<0, vmins, vmaxs)
     }
     if (!is.null(ubs)) model$ub[x] <- ubs * vmaxs
@@ -365,15 +364,14 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1
   model
 }
 
-rm.blocked.rxns <- function(model, nc=1L, rm.extra=FALSE, update.genes=FALSE, lp.pars=list()) {
+rm.blocked.rxns <- function(model, nc=1L, rm.extra=FALSE, update.genes=FALSE, solv.pars=get.pars("lp", list())) {
   # remove blocked/deadend reactions, i.e. reactions with fixed flux of 0
   # These fields below are assumed to be present in the model, and only these fields of the model are kept and updated using subset.model() (i.e. the returned model will have other fields discarded):
   # "rxns","rxnNames","lb","ub","c","rules","subSystems","genes","mets","metNames","metFormulas","rowlb","rowub","b","S"
-  # lp.pars: parameters for LP passed to fva()
+  # solv.pars: solver parameters passed to fva(), by default LP
 
-  lp.pars <- get.pars("lp", lp.pars)
-  fva.res <- fva(model, nc=nc, lp.pars=lp.pars)
-  x <- fva.res[,1]==0 & fva.res[,2]==0
+  fva.res <- fva(model, nc=nc, solv.pars=solv.pars)
+  x <- fva.res$vmin==0 & fva.res$vmax==0
   rm.rxns(model, x, rm.extra, update.genes)
 }
 

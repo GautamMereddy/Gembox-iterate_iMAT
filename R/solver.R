@@ -36,8 +36,9 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
         if (objsense=="min") res$obj <- -Inf
         if (objsense=="max") res$obj <- Inf
       } else if (!res$stat %in% c(1,101,102,128,129,130)) {
-        warning("In solve.model(): Potential issue, solver status: ", res$stat.str, ", returning NA for objective value.", call.=FALSE)
+        warning("In solve.model(): Potential issue, solver status: ", res$stat.str, ", returning NA for xopt and objective value.", call.=FALSE)
         res$obj <- NA
+        res$xopt <- NA
       }
       res
     }

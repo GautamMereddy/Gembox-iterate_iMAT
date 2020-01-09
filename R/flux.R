@@ -1,14 +1,13 @@
 ###### flux analysis: functions involving running simple optimization problems ######
 
 
-get.opt.flux <- function(model, rxns="biomass", coefs=1, dir="max", ko=NULL, xopt=FALSE, lp.pars=list()) {
+get.opt.flux <- function(model, rxns="biomass", coefs=1, dir="max", ko=NULL, xopt=FALSE, solv.pars=get.pars("lp", list())) {
   # get the max or min flux of a single reaction in the model, given in rxns as indices or IDs as in model$rxns; if rxns="biomass" or is a single string containing the substing "biomass" (the default), optimize the biomass reaction as found by get.biomass.idx using rxns as the regex
   # or, get the max or min flux of a linear combination of reactions, with the corresponding linear coefficients given in coefs
   # to knockout reaction(s), pass KO as their indices or IDs; the lb's and ub's of these reactions will be set to 0
   # if xopt=TRUE, the optimal xopt vector will also be returned, then will return a list of list(obj, xopt); otherwise just the optimal obj value
-  # lp.pars: a list of control parameters passed to solver
+  # solv.pars: a list of control parameters passed to solver, the default is to use the default LP pars
 
-  lp.pars <- get.pars("lp", lp.pars)
   c <- rep(0, ncol(model$S))
   if (length(rxns)==1 && grepl("biomass", rxns, ignore.case=TRUE)) {
     i <- get.biomass.idx(model, rgx=rxns)
@@ -16,16 +15,14 @@ get.opt.flux <- function(model, rxns="biomass", coefs=1, dir="max", ko=NULL, xop
   c[i] <- coefs
   lb <- model$lb
   ub <- model$ub
-  ko <- all2idx(model, ko)
-  lb[ko] <- 0
-  ub[ko] <- 0
-
-  res <- solve.model(model, csense=dir, c=c, lb=lb, ub=ub, pars=lp.pars)[[1]]
-  if (res$stat!=1) {
-    # if solver status not 1 (optimal), to be safe, set result to NA
-    res$xopt <- NA
-    if (!res$stat %in% c(2,12)) res$obj <- NA # exclude the case of solver status 2 (unbounded) and 12, where obj will already by +/-Inf
+  if (!is.null(ko)) {
+    ko <- all2idx(model, ko)
+    lb[ko] <- 0
+    ub[ko] <- 0
   }
+
+  res <- solve.model(model, csense=dir, c=c, lb=lb, ub=ub, pars=solv.pars)[[1]]
+
   if (xopt) {
     return(list(obj=res$obj, xopt=res$xopt))
   } else return(res$obj)
@@ -33,32 +30,34 @@ get.opt.flux <- function(model, rxns="biomass", coefs=1, dir="max", ko=NULL, xop
 
 fba <- get.opt.flux # flux balance analysis as a synonym of get.opt.flux
 
-get.opt.fluxes <- function(model, rxns="all", dir="max", nc=1L, lp.pars=list()) {
+get.opt.fluxes <- function(model, rxns="all", dir="max", nc=1L, solv.pars=get.pars("lp", list())) {
   # a wrapper around get.opt.flux for getting the min or max fluxes of multiple single reactions at once; return a named vector
   # thus this function is not for optimizing linear combination of reactions; and the direction will be either min or max for all rxns; no xopt is returned
 
-  lp.pars <- get.pars("lp", lp.pars)
   if (length(rxns)==1 && rxns=="all") {
     rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
   } else rxns <- all2idx(model, rxns)
-  res <- unlist(parallel::mclapply(rxns, get.opt.flux, model=model, dir=dir, lp.pars=lp.pars, mc.cores=nc))
+  res <- unlist(parallel::mclapply(rxns, get.opt.flux, model=model, dir=dir, solv.pars=solv.pars, mc.cores=nc))
   names(res) <- model$rxns[rxns]
   res
 }
 
-fva <- function(model, rxns="all", nc=1L, max.biomass=FALSE, biomass.rgx="biomass", lp.pars=list()) {
+fva <- function(model, rxns="all", nc=1L, max.biomass=FALSE, biomass.rgx="biomass", solv.pars=get.pars("lp", list())) {
   # flux variability analysis, for rxns given as indices of IDs as in model$rxns; "all" for all rxns
   # max.biomass: whether to fix biomass at the maximum; biomass.rgx: regex used to find the biomass reaction
   # return a named matrix with two columns "min" and "max", rxns in the rows
 
-  lp.pars <- get.pars("lp", lp.pars)
+  if (length(rxns)==1 && rxns=="all") {
+    rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
+  } else rxns <- all2idx(model, rxns)
+
   if (max.biomass) {
     bm.idx <- get.biomass.idx(model, biomass.rgx)
-    model <- set.rxn.bounds(model, bm.idx, lbs=1, ubs=1, relative=TRUE, nc=1L, lp.pars)
+    model <- set.rxn.bounds(model, bm.idx, lbs=1, ubs=1, relative=TRUE, nc=1L, solv.pars)
   }
-  min <- get.opt.fluxes(model, rxns, "min", nc, lp.pars)
-  max <- get.opt.fluxes(model, rxns, "max", nc, lp.pars)
-  cbind(min, max)
+  min <- get.opt.fluxes(model, rxns, "min", nc, solv.pars)
+  max <- get.opt.fluxes(model, rxns, "max", nc, solv.pars)
+  data.table(id=rxns, rxn=model$rxns[rxns], vmin=min, vmax=max)
 }
 
 run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) {

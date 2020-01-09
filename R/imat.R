@@ -143,8 +143,13 @@ run.imat <- function(imat.model, imat.pars, solv.pars) {
   } else if (imat.pars$mode==1) {
     # mode 1: solve the iMAT MILP under the forced inactivaton/activation of each rxn, determine (de)activated rxns based on the resulting objective values
     tmp <- imat.mode1(imat.model, imat.pars, solv.pars)
-    imat.model$fluxes.int.imat <- tmp$flux.int
-    imat.model$solver.out <- tmp$obj
+    imat.model$fluxes.int.imat <- tmp$flux.int.imat
+    imat.model$solver.out <- tmp$solver.out
+  } else if (imat.pars$mode==2) {
+    # mode 2: constrain the original MILP objective at the optimal value, then solve for min/max flux of each rxn
+    tmp <- imat.mode2(imat.model, imat.pars, solv.pars)
+    imat.model$fluxes.int.imat <- tmp$flux.int.imat
+    imat.model$solver.out <- tmp$solver.out
   }
   imat.model
 }
@@ -185,9 +190,10 @@ get.imat.opt.flux.int <- function(imat.model, xopt) {
 
 imat.mode1 <- function(imat.model, imat.pars, solv.pars) {
   # the mode 1 of imat (the fva-like approach): solve the iMAT MILP under the forced inactivaton/activation of each rxn, determine (de)activated rxns based on the resulting objective values
-  # return a list(obj, flux.int), obj is a data.table of the optimal iMAT objectives for all rxns, flux.int is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
+  # return a list(solver.out, flux.int.imat), solver.out is a data.table of the optimal iMAT objectives for all rxns, flux.int.imat is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
-  solv.pars$nsol <- 1 # just to make sure
+  solv.pars$nsol <- 1
+  solv.pars$tilim <- 120
   rxns <- which(imat.model$var.ind=="v")
   names(rxns) <- imat.model$rxns[rxns]
   obj <- rbindlist(parallel::mclapply(rxns, function(i) {
@@ -227,7 +233,21 @@ imat.mode1 <- function(imat.model, imat.pars, solv.pars) {
   })
   fint <- ifelse(tmp==1, 0L, ifelse(tmp==2, 1L, ifelse(tmp==3, -1L, 9L)))
   # result
-  list(obj=obj, flux.int=fint)
+  list(solver.out=obj, flux.int.imat=fint)
+}
+
+imat.mode2 <- function(imat.model, imat.pars, solv.pars) {
+  # the mode 2 of imat: similar to mode 1, but after solving the original iMAT MILP, constrain the objective at the optimal value, then for each reaction solve a pair of MILP's to obtain its min/max fluxes
+  # return a list(solver.out, flux.int.imat), solver.out is a data.table of the min/max fluxes for all rxns, flux.int.imat is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
+
+  solv.pars$nsol <- 1
+  solv.pars$tilim <- 120
+  obj.opt <- solve.model(imat.model, pars=solv.pars)[[1]]$obj
+  imat.model.opt <- add.constraint(imat.model, 1:length(imat.model$c), imat.model$c, obj.opt, obj.opt)
+  fva.res <- fva(imat.model.opt, rxns="all", nc=imat.pars$nc, solv.pars=solv.pars)
+  fint <- ifelse(fva.res$vmin>=imat.pars$flux.act, 1L, ifelse(fva.res$vmax<= -imat.pars$flux.act, -1L, ifelse(fva.res$vmax<=imat.pars$flux.inact & fva.res$vmin>= -imat.pars$flux.inact, 0L, 9L)))
+  # result
+  list(solver.out=fva.res, flux.int.imat=fint)
 }
 
 update.model.imat <- function(model, imat.res, imat.pars) {
@@ -235,11 +255,18 @@ update.model.imat <- function(model, imat.res, imat.pars) {
   # return the updated model
   pars <- get.pars("imat", imat.pars)
 
-  fint <- imat.res$fluxes.int.imat
-  model$lb[fint==1] <- pars$flux.act
-  model$ub[fint==-1] <- -pars$flux.act
-  model$ub[fint==0] <- pars$flux.inact
-  model$lb[fint==0 & model$lb<0] <- -pars$flux.inact
+  if (pars$mode==2) {
+    tmp <- !is.na(imat.res$solver.out$vmin)
+    model$lb[tmp] <- imat.res$solver.out$vmin[tmp]
+    tmp <- !is.na(imat.res$solver.out$vmax)
+    model$ub[tmp] <- imat.res$solver.out$vmax[tmp]
+  } else {
+    fint <- imat.res$fluxes.int.imat
+    model$lb[fint==1] <- pars$flux.act
+    model$ub[fint==-1] <- -pars$flux.act
+    model$ub[fint==0] <- pars$flux.inact
+    model$lb[fint==0 & model$lb<0] <- -pars$flux.inact
+  }
   model
 }
 
