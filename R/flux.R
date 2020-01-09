@@ -69,13 +69,13 @@ run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) 
   # nc: the number of cores for running across rxns
   # simplify: if FALSE, return a list from mclapply across rxns; if TRUE, then assume the run for each rxn yields a summary data.table, and will try to combine them with rbindlist
 
-  if (rxns=="all+ctrl") {
+  if (length(rxns)==1 && rxns=="all+ctrl") {
     rxns <- 0:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
     names(rxns) <- c("ctrl", model$rxns)
-  } else if (rxns=="all") {
+  } else if (length(rxns)==1 && rxns=="all") {
     rxns <- 1:length(model$rxns)
     names(rxns) <- model$rxns
-  } else if (rxns=="ctrl") {
+  } else if (length(rxns)==1 && rxns=="ctrl") {
     rxns <- 0
     names(rxns) <- "ctrl"
   } else if (is.character(rxns)) {
@@ -88,16 +88,17 @@ run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) 
     names(rxns)[rxns==0] <- "ctrl"
   }
 
-  res <- parallel::mclapply(rxns, function(i) {
+  res <- parallel::mclapply(1:length(rxns), function(i) {
+    message("run.ko.screen(): Run #", i, ".")
     m <- model
-    m$lb[i] <- 0 # if i==0, lb will not be changed (i.e. the control)
-    m$ub[i] <- 0 # if i==0, ub will not be changed (i.e. the control)
+    m$lb[rxns[i]] <- 0 # if rxns[i]==0, lb will not be changed (i.e. the control)
+    m$ub[rxns[i]] <- 0 # if rxns[i]==0, ub will not be changed (i.e. the control)
     f(model, ...)
   }, mc.cores=nc)
 
   if (simplify) {
     if (any(!sapply(res, is.data.table))) {
-      warning("Outputs contain non-data.table objects, cannot simplify.")
+      warning("Outputs contain non-data.table objects, cannot simplify.", immediate.=TRUE)
     } else res <- cbind(data.table(id=rxns), rbindlist(res, idcol="rxn"))
   }
   res

@@ -88,7 +88,7 @@ form.mta <- function(model, flux0, dflux, mta.pars) {
   rxns.st <- which(dflux==0 & model$c!=1 & !grepl("biomass", model$rxns, ignore.case=TRUE))
   tmp <- rep(0, n)
   tmp[rxns.st] <- 2*(1-pars$alpha)
-  Q <- .sparseDiagonal(x=tmp)
+  Q <- .sparseDiagonal(x=tmp) # need to use .sparseDiagonal() instead of Diagonal() since Rcplex requires Q to be of the class dsparseMatrix
   c <- rep(c(0, pars$alpha/2, 0, pars$alpha/2), c(n.rxns+n.fw, n.fw, n.bk, n.bk))
   c[rxns.st] <- -2*(1-pars$alpha)*flux0[rxns.st]
   vtype <- rep(c("C","I"), c(n.rxns, n-n.rxns))
@@ -104,7 +104,7 @@ get.mta.score <- function(model, miqp.out, detail) {
   # return a 1-row data.table
 
   miqp.out <- miqp.out[[1]]
-  if (is.na(miqp.out$xopt)) {
+  if (length(miqp.out$xopt)==1 && is.na(miqp.out$xopt)) {
     if (detail) {
       return(data.table(solv.stat=miqp.out$stat.str, v.opt=NA, rxns.change.yes=NA, rxns.change.no=NA, rxns.change.overdo=NA, advs.change.yes=NA, advs.change.no=NA, advs.change.overdo=NA, advs.steady=NA, score.change=NA, score.steady=NA, score.mta=NA))
     } else {
@@ -146,9 +146,9 @@ get.mta.score <- function(model, miqp.out, detail) {
   s <- s.ch/s.st
   # return
   if (detail) {
-    res <- data.table(solv.stat=miqp.res$stat.str, v.opt=list(v), rxns.change.yes=list(yes), rxns.change.no=list(no), rxns.change.overdo=list(overdo), advs.change.yes=list(adv.yes), advs.change.no=list(adv.no), advs.change.overdo=list(adv.overdo), advs.steady=list(adv.st), score.change=s.ch, score.steady=s.st, score.mta=s)
+    res <- data.table(solv.stat=miqp.out$stat.str, v.opt=list(v), rxns.change.yes=list(yes), rxns.change.no=list(no), rxns.change.overdo=list(overdo), advs.change.yes=list(adv.yes), advs.change.no=list(adv.no), advs.change.overdo=list(adv.overdo), advs.steady=list(adv.st), score.change=s.ch, score.steady=s.st, score.mta=s)
   } else {
-    res <- data.table(solv.stat=miqp.res$stat.str, score.change=s.ch, score.steady=s.st, score.mta=s)
+    res <- data.table(solv.stat=miqp.out$stat.str, score.change=s.ch, score.steady=s.st, score.mta=s)
   }
   res
 }
@@ -157,6 +157,7 @@ run.mta <- function(model, solv.pars, detail) {
   # solve the MTA MIQP models for each rxn
   # return the summary of MTA scores for the rxns in a data.table
   solv.pars <- get.pars("mip", solv.pars)
+  solv.pars$trace <- 0
 
   solv.out <- solve.model(model, pars=solv.pars)
   get.mta.score(model, solv.out, detail)
@@ -178,10 +179,13 @@ rmta <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=100
   mta.model <- form.mta(model, flux0, dflux, mta.pars)
   mta.model0 <- form.mta(model, flux0, -dflux, mta.pars)
   # solve the MTA models across the rxns for both models
+  message("rmta(): Running MTA for dflux.")
   res <- run.ko.screen(mta.model, rxns, run.mta, solv.pars=mip.pars, detail=detail, nc=nc)
+  message("rmta(): Running MTA for -dflux.")
   res0 <- run.ko.screen(mta.model0, rxns, run.mta, solv.pars=mip.pars, detail=FALSE, nc=nc)
 
   # MOMA for dflux
+  message("rmta(): Running MOMA.")
   tmpf <- function(x) get.mta.score(model=mta.model, x, detail=detail)
   res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=qp.pars)
 

@@ -26,18 +26,18 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
       nsol <- pars$nsol
       pars$nsol <- NULL
     } else nsol <- 1
-    res <- Rcplex::Rcplex(c, A, b, Q, lb, ub, x0, pars, csense, sense, vtype, nsol)
+    res <- Rcplex2::Rcplex(c, A, b, Q, lb, ub, x0, pars, csense, sense, vtype, nsol)
     tmpf <- function(x) {
       res <- x[c("xopt", "obj")]
       res$stat <- x$status
       res$stat.str <- .pkg.const$cpx.stat.code[as.character(x$status)]
-      if (!res$stat %in% c(1,101,102,128,129,130)) {
-        warning("In solve.model(): Potential issue, solver status: ", res$stat.str, call.=FALSE)
-      }
       if (res$stat %in% c(2,118,12)) {
         # unbounded (2,118) or possibly unbounded (12, maybe others but I'm not sure) problem
         if (objsense=="min") res$obj <- -Inf
         if (objsense=="max") res$obj <- Inf
+      } else if (!res$stat %in% c(1,101,102,128,129,130)) {
+        warning("In solve.model(): Potential issue, solver status: ", res$stat.str, ", returning NA for objective value.", call.=FALSE)
+        res$obj <- NA
       }
       res
     }

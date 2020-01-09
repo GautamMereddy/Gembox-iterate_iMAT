@@ -3,12 +3,13 @@
 
 ### --- iMAT for two samples --- ###
 
-imat2 <- function(model, expr1, expr2, dflux, imat.pars=list(), solv.pars=list(), samp.pars=list()) {
+imat2 <- function(model, expr1, expr2, dflux, imat.pars=list(), solv.pars=list(), solv.pars1=list(), samp.pars=list()) {
   # the main function for running iMAT for two samples in a single step
   # dflux is the discretized (-1/0/1) vector in the order or model rxns representing the intended flux changes of model2 compared to model1
   # if imat.pars$nsteps==1, return a list(imat.model, result.model)
   # if imat.pars$nsteps==2, return a list(imat.model1, imat.model2, imat.model.dflux, result.model), where imat.model1/2 are the original imat models from the first step for expr1/2, and imat.model.dflux is the diff flux part of the imat model in the second step
 
+  imat.pars <- get.pars("imat", imat.pars)
   if (imat.pars$nsteps==1) {
     # if running imat2 in a single step
     # original imat model for expr1 and expr2
@@ -16,8 +17,8 @@ imat2 <- function(model, expr1, expr2, dflux, imat.pars=list(), solv.pars=list()
     model2 <- form.imat(model, expr2, imat.pars)
   } else if (imat.pars$nsteps==2) {
     # if running imat2 in two steps, as the 1st step, run the original imat, obtain the updated metabolic models for both samples
-    tmp.model1 <- imat(model, expr1, imat.pars, solv.pars, samp.pars=NULL)
-    tmp.model2 <- imat(model, expr2, imat.pars, solv.pars, samp.pars=NULL)
+    tmp.model1 <- imat(model, expr1, imat.pars, solv.pars1, samp.pars=NULL)
+    tmp.model2 <- imat(model, expr2, imat.pars, solv.pars1, samp.pars=NULL)
     model1 <- tmp.model1$result.model
     model2 <- tmp.model2$result.model
   }
@@ -79,7 +80,7 @@ form.imat.dflux0 <- function(model, i1, i2, df, rr, pars) {
     model$c <- c(model$c, 1)
     model$vtype <- c(model$vtype, "I")
     model$var.ind <- c(model$var.ind, "z+")
-    # if reversible rxn, need to add an extra constraint on z+, and similarly a pair of constraints on z-, and the constraint that z+ + z- <= 1
+    # if reversible rxn, need to add an extra constraint on z+, and similarly a pair of constraints on z-, and the constraint that (z+) + (z-) <= 1
     if (rr) {
       if (df>0) {
         # additional z+
@@ -155,8 +156,8 @@ form.imat.dflux <- function(model1, model2=model1, dflux, imat.pars) {
 run.imat.dflux <- function(imat.model, imat.pars, solv.pars) {
   # solve the iMAT differential flux MILP model
   # return the imat.model with the results from running iMAT added:
-  # if the part for the original iMAT formulation is in imat.model, then will contain imat.model$fluxes.int.imat: a vector in the order of the rxns for the two consecutive models, with values -1/0/1/2 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction, as that returned by run.imat()
-  # imat.model$dfluxes.int.imat: a vector in the order of the model rxns, with values 1/2/-1/-2/0/3, where: 1/-1 means positive or negative dflux, 2/-2 means pos/neg dflux of the alternative form (corresponding to z- = 1, for reversible rxns only), 0 means steady flux, 3 means rxn is not forced to have either differential or steady flux, as determined by iMAT
+  # if the part for the original iMAT formulation is in imat.model, then will contain imat.model$fluxes.int.imat: a vector in the order of the rxns for the two consecutive models, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction, as that returned by run.imat()
+  # imat.model$dfluxes.int.imat: a vector in the order of the model rxns, with values 1/2/-1/-2/0/9, where: 1/-1 means positive or negative dflux, 2/-2 means pos/neg dflux of the alternative form (corresponding to (z-) = 1, for reversible rxns only), 0 means steady flux, 9 means rxn is not forced to have either differential or steady flux, as determined by iMAT
   # imat.model$solver.out: the output of MILP solver
   imat.pars <- get.pars("imat", imat.pars)
   solv.pars <- get.pars("mip", solv.pars)
@@ -171,8 +172,8 @@ run.imat.dflux <- function(imat.model, imat.pars, solv.pars) {
 }
 
 get.imat.opt.dflux.int <- function(imat.model, xopt) {
-  # given the formulated imat.model involving differential fluxes, and the xopt of solving that model, return a vector in the order of the model rxns, with values 1/2/-1/-2/0/3, where:
-  # 1/-1 means positive or negative dflux, 2/-2 means pos/neg dflux of the alternative form (corresponding to z- = 1, for reversible rxns only), 0 means steady flux, 3 means rxn is not forced to have either differential or steady flux
+  # given the formulated imat.model involving differential fluxes, and the xopt of solving that model, return a vector in the order of the model rxns, with values 1/2/-1/-2/0/9, where:
+  # 1/-1 means positive or negative dflux, 2/-2 means pos/neg dflux of the alternative form (corresponding to (z-) = 1, for reversible rxns only), 0 means steady flux, 9 means rxn is not forced to have either differential or steady flux
 
   zp <- xopt[imat.model$var.ind=="z+"]
   zm <- xopt[imat.model$var.ind=="z-"]
@@ -185,7 +186,7 @@ get.imat.opt.dflux.int <- function(imat.model, xopt) {
   pos.alt <- intersect(zm1, imat.model$rxns.pos) # rxns whose fluxes 2>1, alternative form (i.e. (z-)=1 case)
   neg.alt <- intersect(zm1, imat.model$rxns.neg) # rxns whose fluxes 2<1, alternative form (i.e. (z-)=1 case)
 
-  zres <- rep(3L, length(imat.model$dfluxes.int))
+  zres <- rep(9L, length(imat.model$dfluxes.int))
   zres[pos] <- 1L
   zres[pos.alt] <- 2L
   zres[neg] <- -1L
@@ -233,6 +234,7 @@ imat.mc <- function(model, expr, dflux, imat.pars=list(), solv.pars=list(), solv
   # if imat.pars$nsteps==1, return a list(imat.model, result.model)
   # if imat.pars$nsteps==2, return a list(imat.model, imat.model.dflux, result.model), where imat.model is the original imat model from the first step, and imat.model.dflux is the diff flux part of the imat model in the second step
 
+  imat.pars <- get.pars("imat", imat.pars)
   if (imat.pars$nsteps==1) {
     # formulate iMAT model including the diff flux part
     imat.model <- form.imat(model, expr, imat.pars)

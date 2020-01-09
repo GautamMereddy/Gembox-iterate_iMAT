@@ -83,7 +83,7 @@ get.metal.score <- function(model, lp.out, detail) {
   # return a 1-row data.table
 
   lp.out <- lp.out[[1]]
-  if (is.na(lp.out$xopt)) {
+  if (length(lp.out$xopt)==1 && is.na(lp.out$xopt)) {
     if (detail) {
       return(data.table(solv.stat=lp.out$stat.str, v.opt=NA, rxns.change.yes=NA, rxns.change.no=NA, advs.change.yes=NA, advs.change.no=NA, advs.steady=NA, score.change=NA, score.steady=NA, score.mta=NA))
     } else {
@@ -151,7 +151,7 @@ run.metal <- function(model, solv.pars, detail) {
 
 ### --- additional variations of metal --- ###
 
-mmetal <- function(model, flux0, dflux, rxns="all", nc=1L, n=1, seeds=1:n, detail=TRUE, solv.pars=list()) {
+mmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, n=1, seeds=1:n, detail=TRUE, solv.pars=list()) {
   # running multiple metal models including the original one, with the additional "control" models using: 1. dflux <- -dflux; 2. dflux <- a set of random orthogonal dflux vectors
   # n: the number of random orthogonal dflux vectors to generate (and thus the random metal models to run)
   # seeds: the seeds for generating the random orthogonal dflux vectors, its length is equal to n; or NULL meaning do not set seed
@@ -166,11 +166,13 @@ mmetal <- function(model, flux0, dflux, rxns="all", nc=1L, n=1, seeds=1:n, detai
   }
 
   # original model
+  message("mmetal(): Running metal.")
   res <- metal(model, flux0, dflux, rxns, nc, detail, solv.pars)
 
   # control models
-  ctrls <- sapply(dfs, function(x) {
-    res <- metal(model, flux0, x, rxns, nc, detail=FALSE, solv.pars)
+  ctrls <- sapply(1:length(dfs), function(i) {
+    message("mmetal(): Running control #", i, ".")
+    res <- metal(model, flux0, dfs[[i]], rxns, nc, detail=FALSE, solv.pars)
     res$result$score.mta
   })
   med <- apply(ctrls, 1, median)
@@ -227,10 +229,13 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=1
   metal.model <- form.metal(model, flux0, dflux)
   metal.model0 <- form.metal(model, flux0, -dflux)
   # solve the MTA models across the rxns for both models
+  message("rmetal(): Running metal for dflux.")
   res <- run.ko.screen(metal.model, rxns, run.metal, solv.pars=lp.pars, detail=detail, nc=nc)
+  message("rmetal(): Running metal for -dflux.")
   res0 <- run.ko.screen(metal.model0, rxns, run.metal, solv.pars=lp.pars, detail=FALSE, nc=nc)
 
   # MOMA for dflux
+  message("rmetal(): Running MOMA.")
   tmpf <- function(x) get.metal.score(model=metal.model, x, detail=detail)
   res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=qp.pars)
 

@@ -129,7 +129,7 @@ form.imat <- function(model, expr, imat.pars) {
 run.imat <- function(imat.model, imat.pars, solv.pars) {
   # solve the iMAT MILP model
   # return the imat.model with the results from running iMAT added:
-  # imat.model$fluxes.int.imat: a vector in the order of the model rxns, with values -1/0/1/2 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
+  # imat.model$fluxes.int.imat: a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
   # imat.model$solver.out: if imat.pars$mode==0, then this is the output of MILP solver; if mode==1, then this is a list(obj) where obj is a matrix of size #rxns-by-3 containing the MILP objective values for each rxn being forced inactive/foward-active/backward-active
   imat.pars <- get.pars("imat", imat.pars)
   solv.pars <- get.pars("mip", solv.pars)
@@ -168,7 +168,7 @@ get.xopt <- function(imat.model, milp.out, pars) {
 }
 
 get.imat.opt.flux.int <- function(imat.model, xopt) {
-  # given the formulated imat.model, and the xopt of solving that model, return a vector in the order of the model rxns, with values -1/0/1/2 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
+  # given the formulated imat.model, and the xopt of solving that model, return a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
   yp <- xopt[imat.model$var.ind %in% c("y+","y+_1","y+_2")]
   ym <- xopt[imat.model$var.ind %in% c("y-","y-_1","y-_2")]
@@ -176,16 +176,16 @@ get.imat.opt.flux.int <- function(imat.model, xopt) {
   fw <- imat.model$rxns.act[yp==1]
   bk <- imat.model$rxns.act.rev[ym==1]
   inact <- imat.model$rxns.inact[y0==1]
-  yres <- rep(0L, sum(imat.model$var.ind %in% c("v","v_1","v_2")))
+  yres <- rep(9L, sum(imat.model$var.ind %in% c("v","v_1","v_2")))
   yres[fw] <- 1L
-  yres[bk] <- 2L
-  yres[inact] <- -1L
+  yres[bk] <- -1L
+  yres[inact] <- 0L
   yres
 }
 
 imat.mode1 <- function(imat.model, imat.pars, solv.pars) {
   # the mode 1 of imat (the fva-like approach): solve the iMAT MILP under the forced inactivaton/activation of each rxn, determine (de)activated rxns based on the resulting objective values
-  # return a list(obj, flux.int), obj is a data.table of the optimal iMAT objectives for all rxns, flux.int is a vector in the order of the model rxns, with values -1/0/1/2 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
+  # return a list(obj, flux.int), obj is a data.table of the optimal iMAT objectives for all rxns, flux.int is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
   solv.pars$nsol <- 1 # just to make sure
   rxns <- which(imat.model$var.ind=="v")
@@ -213,7 +213,9 @@ imat.mode1 <- function(imat.model, imat.pars, solv.pars) {
   }, mc.cores=imat.pars$nc), idcol="rxn")
   obj <- cbind(data.table(id=rxns), obj)
   tmp <- apply(objs[,-1:-2], 1, function(x) {
-    if (uniqueN(x)==3) {
+    if (any(is.na(x))) {
+      return(0)
+    } else if (uniqueN(x)==3) {
       return(which.max(x))
     } else if (x[2]==x[3] && x[1]>x[2]) {
       return(1)
@@ -223,7 +225,7 @@ imat.mode1 <- function(imat.model, imat.pars, solv.pars) {
       return(3)
     } else return(0)
   })
-  fint <- ifelse(tmp==1, -1L, ifelse(tmp==2, 1L, ifelse(tmp==3, 2L, 0L)))
+  fint <- ifelse(tmp==1, 0L, ifelse(tmp==2, 1L, ifelse(tmp==3, -1L, 9L)))
   # result
   list(obj=obj, flux.int=fint)
 }
@@ -235,9 +237,9 @@ update.model.imat <- function(model, imat.res, imat.pars) {
 
   fint <- imat.res$fluxes.int.imat
   model$lb[fint==1] <- pars$flux.act
-  model$ub[fint==2] <- -pars$flux.act
-  model$ub[fint==-1] <- pars$flux.inact
-  model$lb[fint==-1 & model$lb<0] <- -pars$flux.inact
+  model$ub[fint==-1] <- -pars$flux.act
+  model$ub[fint==0] <- pars$flux.inact
+  model$lb[fint==0 & model$lb<0] <- -pars$flux.inact
   model
 }
 

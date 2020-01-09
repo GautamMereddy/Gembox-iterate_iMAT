@@ -24,8 +24,7 @@
 # sampling parameters
 .pkg.const$samp <- list(method="achr", n.sample=5e3, steps.per.pnt=400, n.warmup=5000, nc=1L)
 # parameters for various algorithms
-.pkg.const$imat <- list(mode=0, sol=0, sol.major.cutoff=0.667, flux.act=1, flux.inact=0.1, flux.delta=0.1, flux.delta.rel=0, flux.bound=1000, nc=1L)
-.pkg.const$mep <- list(beta=1e9, damp=0.9, max.iter=2000, dlb=1e-50, dub=1e50, epsil=1e-6, fix.flux=FALSE, fflux.id=0, fflux.mean=0, fflux.var=0)
+.pkg.const$imat <- list(mode=0, nc=1L, nsteps=1, sol=0, sol.major.cutoff=0.667, flux.act=1, flux.inact=0.1, flux.delta=0.1, flux.delta.rel=0, flux.bound=1000)
 .pkg.const$mta <- list(v.min=-50, v.max=50, v.min.c=-1000, v.max.c=1000, alpha=0.9, epsil=0.01)
 
 # cplex solver status codes
@@ -117,19 +116,19 @@ solver <- function(x=c("","rcplex")) {
   invisible(cur.solver)
 }
 
-get.default.pars <- function(x=c("lp","mip","samp","imat")) {
+get.default.pars <- function(x=c("lp","qp","mip","samp","imat","mta"), print=TRUE) {
   # print and return the default values of parameters
   x <- match.arg(x)
-  if (x %in% c("lp","mip")) {
+  if (x %in% c("lp","qp","mip")) {
     res <- .pkg.const[[x]][[.pkg.var$solver]]
   } else res <- .pkg.const[[x]]
-  print(res)
+  if (print) print(res)
   invisible(res)
 }
 
-get.pars <- function(x=c("lp","mip","samp","imat"), pars) {
+get.pars <- function(x=c("lp","qp","mip","samp","imat","mta"), pars) {
   # a helper function used in other functions to set parameters based on the default parameters and a list of pars
   x <- match.arg(x)
-  default.pars <- get.default.pars(x)
+  default.pars <- get.default.pars(x, print=FALSE)
   new.pars <- c(default.pars[!names(default.pars) %in% names(pars)], pars)
 }

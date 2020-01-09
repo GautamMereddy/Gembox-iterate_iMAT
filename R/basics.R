@@ -12,10 +12,10 @@ all2idx <- function(model, x) {
 
   tmpf <- function(name, x) {
     if (any(x %in% model[[name]])) {
-      message("all2idx(): input as ", name, ".")
+      message("all2idx(): Input as ", name, ".")
       res <- match(x, model[[name]])
       tmp <- is.na(res)
-      if (any(tmp)) warning("NA's returned for these IDs not found: ", paste(x[tmp], collapse=", "), ".", call.=FALSE)
+      if (any(tmp)) warning("NA's returned for these IDs not found: ", paste(x[tmp], collapse=", "), ".", call.=FALSE, immediate.=TRUE)
       res
     } else NULL
   }
@@ -265,9 +265,9 @@ c.model <- function(model1, model2, c.vars=NULL, cx.vars=NULL) {
   fields <- c(fields, c.vars, cx.vars)
   fields <- intersect(fields, intersect(names(model1), names(model2)))
   names(fields) <- fields
-  lapply(fields, function(i) {
-    x1 <- model1[[i]]
-    x2 <- model2[[i]]
+  lapply(fields, function(field) {
+    x1 <- model1[[field]]
+    x2 <- model2[[field]]
     if (field=="S") x <- rbind(cbind(x1, sparseMatrix(NULL, NULL, dims=c(nrow(x1), ncol(x2)))),
                                cbind(sparseMatrix(NULL, NULL, dims=c(nrow(x2), ncol(x1))), x2))
     if (field %in% c("lb","ub","c","rowlb","rowub","b","metFormulas", c.vars)) x <- c(x1, x2)

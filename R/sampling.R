@@ -36,7 +36,7 @@ sample.warmup.pnts <- function(model, n, nc) {
   n.rxns <- ncol(model$S)
   if (n<2*n.rxns) {
     n <- 2*n.rxns
-    warning(sprintf("#{warmup points} should be at least 2*#{reactions}=%d.", 2*n.rxns))
+    warning(sprintf("#{warmup points} should be at least 2*#{reactions}=%d.", 2*n.rxns), immediate.=TRUE)
   }
   message("Will generate ", n, " warmup points.")
   message("Begin generating warmup points...")
@@ -84,6 +84,6 @@ get.rand.pnts <- function(model, n, nc) {
 get.opt.pnt <- function(model, c) {
   # a helper function to get an optimal point corresponding to running LP with objective function coefficients being c (normalized), for ACHR
   c <- c / norm(c,"2")
-  res <- solve.model(model, csense="max", c=c, ctrl=.pkg.const$lp[[.pkg.var$solver]])[[1]]$xopt
+  res <- solve.model(model, csense="max", c=c, pars=.pkg.const$lp[[.pkg.var$solver]])[[1]]$xopt
 }
 

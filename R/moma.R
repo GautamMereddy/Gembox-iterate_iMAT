@@ -5,7 +5,7 @@ minimize.dflux <- function(model, flux0, solv.pars=list()) {
   # solve the QP problem of min ||(flux-flux0)||_2
   solv.pars <- get.pars("qp", solv.pars)
 
-  solve.model(model, csense="min", c=-2*flux0, Q=Diagonal(ncol(model$S), x=2), pars=solv.pars)
+  solve.model(model, csense="min", c=-2*flux0, Q=.sparseDiagonal(ncol(model$S), x=2), pars=solv.pars) # need to use .sparseDiagonal() instead of Diagonal() since Rcplex requires Q to be of the class dsparseMatrix
 }
 
 moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", biomass.rgx="biomass", solv.pars=list()) {
@@ -68,7 +68,7 @@ moma2 <- function(model, rxns="all", nc=1L, obj0=c("biomass","max.c","min.c"), o
   } else if (!is.function(obj)) stop("Invalid value for the obj argument.")
   moma0 <- function(model, obj, pars) {
     c <- rep(0, ncol(model$S))
-    tmp <- Diagonal(ncol(model$S)/2, x=2)
+    tmp <- .sparseDiagonal(ncol(model$S)/2, x=2) # need to use .sparseDiagonal() instead of Diagonal() since Rcplex requires Q to be of the class dsparseMatrix
     Q <- rbind(cbind(tmp, -tmp), cbind(-tmp, tmp))
     obj(solve.model(model, csense="min", c=c, Q=Q, pars=pars))
   }
