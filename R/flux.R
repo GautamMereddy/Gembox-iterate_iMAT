@@ -87,12 +87,14 @@ run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) 
     names(rxns)[rxns==0] <- "ctrl"
   }
 
-  res <- parallel::mclapply(1:length(rxns), function(i) {
+  tmp <- 1:length(rxns)
+  names(tmp) <- rxns
+  res <- parallel::mclapply(tmp, function(i) {
     message("run.ko.screen(): Run #", i, ".")
     m <- model
     m$lb[rxns[i]] <- 0 # if rxns[i]==0, lb will not be changed (i.e. the control)
     m$ub[rxns[i]] <- 0 # if rxns[i]==0, ub will not be changed (i.e. the control)
-    f(model, ...)
+    f(m, ...)
   }, mc.cores=nc)
 
   if (simplify) {

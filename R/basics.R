@@ -127,7 +127,7 @@ exprs2fluxes <- function(model, x, na2zero=TRUE) {
 
   if (is.null(names(x))) {
     if (length(x)==length(model$genes)) {
-      message("exprs2fluxes(): assuming the input vector is in the same order as model$genes.")
+      message("exprs2fluxes(): Assuming the input vector is in the same order as model$genes.")
     } else stop("Input vector and model$genes have different lengths!")
   } else {
     x <- x[model$genes]
@@ -162,7 +162,7 @@ de2dflux <- function(model, x, na2zero=TRUE) {
   if (!all(x %in% c(-1,0,1,NA))) stop("Expression values in x should be from {-1,0,1,NA}.")
   if (is.null(names(x))) {
     if (length(x)==length(model$genes)) {
-      message("de2dflux(): assuming the input vector is in the same order as model$genes.")
+      message("de2dflux(): Assuming the input vector is in the same order as model$genes.")
     } else stop("Input vector and model$genes have different lengths!")
   } else {
     x <- x[model$genes]
