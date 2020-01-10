@@ -88,7 +88,7 @@ run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) 
   }
 
   tmp <- 1:length(rxns)
-  names(tmp) <- rxns
+  names(tmp) <- names(rxns)
   res <- parallel::mclapply(tmp, function(i) {
     message("run.ko.screen(): Run #", i, ".")
     m <- model
