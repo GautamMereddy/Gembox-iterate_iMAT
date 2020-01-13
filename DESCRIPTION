@@ -13,6 +13,7 @@ Depends:
     Matrix,
     data.table
 Imports:
+    Rcpp,
     Rcplex2,
     stringr,
     parallel,
