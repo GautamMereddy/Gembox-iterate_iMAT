@@ -93,7 +93,7 @@ rxns2genes <- function(model, x) {
 
   idx <- all2idx(model, x)
   idx[idx==0] <- NA # NA will be returned where x is 0
-  lapply(str_extract_all(model$rules[idx], "[1-9][0-9]*"), function(x) unique(model$genes[as.numeric(x)]))
+  lapply(stringr::str_extract_all(model$rules[idx], "[1-9][0-9]*"), function(x) unique(model$genes[as.numeric(x)]))
 }
 
 genes2rxns <- function(model, genes, mode=c(0,1), out="idx") {
