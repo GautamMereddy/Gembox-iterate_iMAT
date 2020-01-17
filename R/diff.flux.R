@@ -9,7 +9,7 @@ df.wilcox <- function(mat0, mat1, by=c(1,2), nc, padj.cutoff, r.cutoff, df.cutof
   # nc: number of cores to use
 
   by <- match.arg(as.character(by[1]), c("1","2"))
-  wilcox <- function(s0, s1) {
+  dflux.test <- function(s0, s1) {
     # an inner helper function to run wilcoxon's rank-sum test
     tryCatch({
       wilcox.res <- wilcox.test(s0, s1)
