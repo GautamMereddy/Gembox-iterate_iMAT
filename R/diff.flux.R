@@ -164,10 +164,10 @@ get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","f
     if (!"sample" %in% names(model0) || !"sample" %in% names(model1)) stop("No sampling result found in models, cannot use method 'wilcox' or 'both'.")
     ns <- ncol(model0$sample$pnts)
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-    mat0 <- mapply(function(x,c) colSums(model0$sample$pnts[x, (ns-nsamples+1):ns]*c), rxns, coefs)
+    mat0 <- mapply(function(x,c) colSums(model0$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), rxns, coefs)
     ns <- ncol(model1$sample$pnts)
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-    mat1 <- mapply(function(x,c) colSums(model1$sample$pnts[x, (ns-nsamples+1):ns]*c), rxns, coefs)
+    mat1 <- mapply(function(x,c) colSums(model1$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), rxns, coefs)
     res <- df.wilcox(mat0, mat1, 2, nc, padj.cutoff, r.cutoff, df.cutoff)
   } else {
     res <- df.fva(model0, model1, rxns, coefs, nc, df.cutoff)
