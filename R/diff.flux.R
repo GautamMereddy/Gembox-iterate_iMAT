@@ -38,10 +38,10 @@ df.fva <- function(model0, model1, rxns, coefs, nc, df.cutoff) {
   # a helper function to perform differential flux analysis with FVA, comparing model1 to model0
   # rxns and coefs: either rxns being a vector of reactions and coefs being 1 (df of each of these single reactions), or both being lists in the matched order in the case of df of combined fluxes
 
-  ub0 <- mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model0, dir="max"), mc.cores=nc)
-  lb0 <- mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model0, dir="min"), mc.cores=nc)
-  ub1 <- mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model1, dir="max"), mc.cores=nc)
-  lb1 <- mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model1, dir="min"), mc.cores=nc)
+  ub0 <- parallel::mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model0, dir="max"), mc.cores=nc)
+  lb0 <- parallel::mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model0, dir="min"), mc.cores=nc)
+  ub1 <- parallel::mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model1, dir="max"), mc.cores=nc)
+  lb1 <- parallel::mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model1, dir="min"), mc.cores=nc)
   m0 <- (ub0+lb0)/2
   m1 <- (ub1+lb1)/2
   res <- data.table(lb0=lb0, ub0=ub0, mean0=m0, lb1=lb1, ub1=ub1, mean1=m1, diff.mean=m1-m0)
@@ -61,10 +61,10 @@ df.fva.x2 <- function(model, rxns0, rxns1, coefs, nc, df.cutoff) {
   # rxns0 and rxns1 are in matched order, comparing rxns1 to rxns0
   # rxns(0/1) and coefs: either rxns(0/1) being a vector of reactions and coefs being 1 (df of each of these single reactions), or both being lists in the matched order in the case of df of combined fluxes
 
-  ub0 <- mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)
-  lb0 <- mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
-  ub1 <- mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)
-  lb1 <- mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
+  ub0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)
+  lb0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
+  ub1 <- parallel::mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)
+  lb1 <- parallel::mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
   m0 <- (ub0+lb0)/2
   m1 <- (ub1+lb1)/2
   res <- data.table(lb0=lb0, ub0=ub0, mean0=m0, lb1=lb1, ub1=ub1, mean1=m1, diff.mean=m1-m0)
@@ -206,10 +206,10 @@ get.diff.flux.by.met <- function(model0, model1, mets="all", nsamples=4000, nc=1
   if (!"sample" %in% names(model0) || !"sample" %in% names(model1)) stop("No sampling result found in models, cannot proceed.")
   ns <- ncol(model0$sample$pnts)
   if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-  mat0 <- abs(model0$S[mets,,drop=FALSE]) %*% abs(model0$sample$pnts[, (ns-nsamples+1):ns]*c) / 2
+  mat0 <- abs(model0$S[mets,,drop=FALSE]) %*% abs(model0$sample$pnts[, (ns-nsamples+1):ns]) / 2
   ns <- ncol(model1$sample$pnts)
   if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-  mat1 <- abs(model1$S[mets,,drop=FALSE]) %*% abs(model1$sample$pnts[, (ns-nsamples+1):ns]*c) / 2
+  mat1 <- abs(model1$S[mets,,drop=FALSE]) %*% abs(model1$sample$pnts[, (ns-nsamples+1):ns]) / 2
   res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff)
   res <- cbind(data.table(id=mets, met=model0$mets[mets], res))
 }
@@ -236,8 +236,8 @@ get.diff.flux.by.met.x2 <- function(model, c0="cell1", c1="cell2", mets="all", n
   if (!"sample" %in% names(model)) stop("No sampling result found in models, cannot proceed.")
   ns <- ncol(model$sample$pnts)
   if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-  mat0 <- abs(model$S[m0,,drop=FALSE]) %*% abs(model$sample$pnts[m0, (ns-nsamples+1):ns]*c) / 2
-  mat1 <- abs(model$S[m1,,drop=FALSE]) %*% abs(model$sample$pnts[m1, (ns-nsamples+1):ns]*c) / 2
+  mat0 <- abs(model$S[m0,,drop=FALSE]) %*% abs(model$sample$pnts[m0, (ns-nsamples+1):ns]) / 2
+  mat1 <- abs(model$S[m1,,drop=FALSE]) %*% abs(model$sample$pnts[m1, (ns-nsamples+1):ns]) / 2
   res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff)
   res <- cbind(data.table(id=m0, met=mets, res))
 }
