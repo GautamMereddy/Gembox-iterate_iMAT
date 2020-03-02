@@ -37,6 +37,30 @@ get.biomass.idx <- function(model, rgx="biomass") {
   res
 }
 
+get.transport.info <- function(model, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx="(.*)(\\[e\\]$|_e$)") {
+  # get the info on metabolites that are transported across membrane, between two compartments
+  # met1.rgx and met2.rgx: regex for the metabolites in two compartments
+  # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment label; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met matched by met1.rgx in the rxn); gene (transporter genes mapped to rxn)
+
+  mets1 <- stringr::str_match(model$mets, mets1.rgx)
+  mets1 <- stringr::str_match(model$mets, mets2.rgx)
+  mets <- intersect(mets1[,2], mets2[,2])
+  mets <- mets[!is.na(mets)]
+  mets1 <- all2idx(model, mets1[match(mets, mets1[,2]), 1])
+  mets2 <- all2idx(model, mets2[match(mets, mets2[,2]), 1])
+  tmpf <- function(m1, m2) {
+    rxns <- intersect(mets2rxns(model, m1)[[1]], mets2rxns(model, m2)[[1]])
+    if (is.null(rxns)) return(NULL)
+    coefs <- model$S[m1, rxns]
+    data.table(id=rxns, rxn=model$rxns[rxns], coef=coefs, gene=rxns2genes(model, rxns))
+  }
+  res <- mapply(tmpf, mets1, mets2, SIMPLIFY=FALSE)
+  names(res) <- mets
+  res <- res[!sapply(res, is.null)]
+  if (length(res==0)) stop("No transportation reaction is found.")
+  res
+}
+
 rxns2mets <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out="idx") {
   # map reactions to metabolites, return a list
   # mode: 0: all; -1: reactants; 1: products
