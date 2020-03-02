@@ -43,7 +43,7 @@ get.transport.info <- function(model, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx=
   # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment label; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met matched by met1.rgx in the rxn); gene (transporter genes mapped to rxn)
 
   mets1 <- stringr::str_match(model$mets, mets1.rgx)
-  mets1 <- stringr::str_match(model$mets, mets2.rgx)
+  mets2 <- stringr::str_match(model$mets, mets2.rgx)
   mets <- intersect(mets1[,2], mets2[,2])
   mets <- mets[!is.na(mets)]
   mets1 <- all2idx(model, mets1[match(mets, mets1[,2]), 1])
