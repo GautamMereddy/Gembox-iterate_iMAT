@@ -39,8 +39,8 @@ get.biomass.idx <- function(model, rgx="biomass") {
 
 get.transport.info <- function(model, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx="(.*)(\\[e\\]$|_e$)") {
   # get the info on metabolites that are transported across membrane, between two compartments
-  # met1.rgx and met2.rgx: regex for the metabolites in two compartments
-  # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment label; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met matched by met1.rgx in the rxn); gene (transporter genes mapped to rxn)
+  # mets1.rgx and mets2.rgx: regex for the metabolites in two compartments
+  # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment label; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met matched by mets1.rgx in the rxn); gene (transporter genes mapped to rxn)
 
   mets1 <- stringr::str_match(model$mets, mets1.rgx)
   mets2 <- stringr::str_match(model$mets, mets2.rgx)
@@ -57,7 +57,7 @@ get.transport.info <- function(model, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx=
   res <- mapply(tmpf, mets1, mets2, SIMPLIFY=FALSE)
   names(res) <- mets
   res <- res[!sapply(res, is.null)]
-  if (length(res==0)) stop("No transportation reaction is found.")
+  if (length(res)==0) stop("No transportation reaction is found.")
   res
 }
 
