@@ -1,7 +1,7 @@
 ###### functions for differential flux analysis ######
 
 
-df.wilcox <- function(mat0, mat1, by=c(1,2), nc, padj.cutoff, r.cutoff, df.cutoff) {
+df.wilcox <- function(mat0, mat1, by=c(1,2), nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff) {
   # a helper function to perform differential flux analysis with wilcoxon's rank-sum tests
   # if by=1, then mat0, mat1 are matrices with rows being reactions in matched orders, columns are samples, i.e. each row vector represents a sampling distribution for the flux of a reaction
   # if by=2, then rxns in columns
@@ -16,13 +16,13 @@ df.wilcox <- function(mat0, mat1, by=c(1,2), nc, padj.cutoff, r.cutoff, df.cutof
       # p value
       wilcox.p <- wilcox.res$p.value
       # effect size for wilcoxon's rank-sum test: rank biserial correlation
-      wilcox.r <- unname(1 - 2 * wilcox.res$statistic / (length(s0)*length(s1)))
+      wilcox.r <- unname(1 - 2 * wilcox.res$statistic / (sum(!is.na(s0))*sum(!is.na(s1))))
       # another effect size measure: difference of mean fluxes (I use mean instead of median to facilitate some specific downstream analyses)
       m0 <- mean(s0)
       m1 <- mean(s1)
-      data.table(lb0=min(s0), ub0=max(s0), mean0=m0, lb1=min(s1), ub1=max(s1), mean1=m1, diff.mean=m1-m0, r=wilcox.r, pval=wilcox.p)
+      data.table(lb0=min(s0), ub0=max(s0), mean0=m0, lb1=min(s1), ub1=max(s1), mean1=m1, diff.mean=m1-m0, rel.diff=(m1-m0)/abs(m0), lfc.abs=log2(abs(m1)/abs(m0)), r=wilcox.r, pval=wilcox.p)
     }, error=function(e) {
-      data.table(lb0=NA, ub0=NA, mean0=NA, lb1=NA, ub1=NA, mean1=NA, diff.mean=NA, r=NA, pval=NA)
+      data.table(lb0=NA, ub0=NA, mean0=NA, lb1=NA, ub1=NA, mean1=NA, diff.mean=NA, rel.diff=NA, lfc.abs=NA, r=NA, pval=NA)
     })
   }
   if (by=="1") {
@@ -31,7 +31,7 @@ df.wilcox <- function(mat0, mat1, by=c(1,2), nc, padj.cutoff, r.cutoff, df.cutof
     res <- rbindlist(parallel::mclapply(1:ncol(mat0), function(i) dflux.test(mat0[,i], mat1[,i]), mc.cores=nc))
   }
   res[, padj:=p.adjust(pval, method="BH")]
-  res[, dir:=ifelse(!(padj<padj.cutoff & abs(r)>r.cutoff & abs(diff.mean)>df.cutoff), 0, ifelse(diff.mean>0, 1, -1))]
+  res[, dir:=ifelse(!(padj<padj.cutoff & abs(r)>r.cutoff & abs(diff.mean)>df.cutoff & abs(rel.diff)>rdf.cutoff), 0, ifelse(diff.mean>0, 1, -1))]
 }
 
 df.fva <- function(model0, model1, rxns, coefs, nc, df.cutoff) {
@@ -44,7 +44,7 @@ df.fva <- function(model0, model1, rxns, coefs, nc, df.cutoff) {
   lb1 <- parallel::mcmapply(get.opt.flux, rxns, coefs, MoreArgs=list(model=model1, dir="min"), mc.cores=nc)
   m0 <- (ub0+lb0)/2
   m1 <- (ub1+lb1)/2
-  res <- data.table(lb0=lb0, ub0=ub0, mean0=m0, lb1=lb1, ub1=ub1, mean1=m1, diff.mean=m1-m0)
+  res <- data.table(lb0=lb0, ub0=ub0, mean0=m0, lb1=lb1, ub1=ub1, mean1=m1, diff.mean=m1-m0, rel.diff=(m1-m0)/abs(m0), lfc.abs=log2(abs(m1)/abs(m0)))
   # add summary of flux differences: positive value means flux value changes towards the positive side, vice versa; 0 means unchanged
   `%gt%` <- function(a,b) a-b > df.cutoff
   `%eq%` <- function(a,b) abs(a-b) <= df.cutoff
@@ -67,7 +67,7 @@ df.fva.x2 <- function(model, rxns0, rxns1, coefs, nc, df.cutoff) {
   lb1 <- parallel::mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
   m0 <- (ub0+lb0)/2
   m1 <- (ub1+lb1)/2
-  res <- data.table(lb0=lb0, ub0=ub0, mean0=m0, lb1=lb1, ub1=ub1, mean1=m1, diff.mean=m1-m0)
+  res <- data.table(lb0=lb0, ub0=ub0, mean0=m0, lb1=lb1, ub1=ub1, mean1=m1, diff.mean=m1-m0, rel.diff=(m1-m0)/abs(m0), lfc.abs=log2(abs(m1)/abs(m0)))
   # add summary of flux differences: positive value means flux value changes towards the positive side, vice versa; 0 means unchanged
   `%gt%` <- function(a,b) a-b > df.cutoff
   `%eq%` <- function(a,b) abs(a-b) <= df.cutoff
@@ -79,7 +79,7 @@ df.fva.x2 <- function(model, rxns0, rxns1, coefs, nc, df.cutoff) {
              ifelse(mean0 %gt% mean1, -1, 0))))))]
 }
 
-get.diff.flux <- function(model0, model1, rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6) {
+get.diff.flux <- function(model0, model1, rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # do differential flux analysis: model1 compared to model0, for the reactions specified in rxns (can be either indices or IDs as in model$rxns)
   # method: df method to use
   # nsamples: a single number, meaning to use the last N samples
@@ -95,7 +95,7 @@ get.diff.flux <- function(model0, model1, rxns="all", method=c("wilcox","fva","b
     ns <- ncol(model1$sample$pnts)
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
     mat1 <- model1$sample$pnts[rxns, (ns-nsamples+1):ns]
-    res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff)
+    res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   } else {
     res <- df.fva(model0, model1, rxns, 1, nc, df.cutoff)
   }
@@ -107,7 +107,7 @@ get.diff.flux <- function(model0, model1, rxns="all", method=c("wilcox","fva","b
   res <- cbind(data.table(id=rxns, rxn=model0$rxns[rxns]), res)
 }
 
-get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6) {
+get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # diff.flux for bicellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
   # by default, rxns=="all": do diff.flux for all reactions that are not exlusively in the extracellular space; or specify rxns by their indices or IDs as in unicellular model
   # method: df method to use
@@ -136,7 +136,7 @@ get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
     mat0 <- model$sample$pnts[r0, (ns-nsamples+1):ns]
     mat1 <- model$sample$pnts[r1, (ns-nsamples+1):ns]
-    res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff)
+    res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   } else {
     res <- df.fva.x2(model, r0, r1, 1, nc, df.cutoff)
   }
@@ -148,7 +148,7 @@ get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c
   res <- cbind(data.table(id=r0, rxn=rxns), res)
 }
 
-get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6) {
+get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # do differential flux analysis (model1 compared to model0) for the linear combination of fluxes of rxns
   # rxns is a list, each element is a vector of reaction indices or IDs (as in model$rxns)
   # coefs is a list in the matched order with rxns, each element contains the coefficient for the linear combination
@@ -168,7 +168,7 @@ get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","f
     ns <- ncol(model1$sample$pnts)
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
     mat1 <- mapply(function(x,c) colSums(model1$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), rxns, coefs)
-    res <- df.wilcox(mat0, mat1, 2, nc, padj.cutoff, r.cutoff, df.cutoff)
+    res <- df.wilcox(mat0, mat1, 2, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   } else {
     res <- df.fva(model0, model1, rxns, coefs, nc, df.cutoff)
   }
@@ -181,7 +181,7 @@ get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","f
   res <- cbind(data.table(id=tmp, res))
 }
 
-get.diff.transport.flux <- function(model0, model1, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx="(.*)(\\[e\\]$|_e$)", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6) {
+get.diff.transport.flux <- function(model0, model1, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx="(.*)(\\[e\\]$|_e$)", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # do differential flux analysis (model1 compared to model0) for transportation reactions (i.e. reactions of metabolites being transported between two compartments)
   # mets1.rgx and mets2.rgx: regex for the metabolites in the two compartments
   # this function will do df of the net (summed) fluxes for each metabolite being transported from compartment 2 to compartment 1
@@ -192,10 +192,10 @@ get.diff.transport.flux <- function(model0, model1, mets1.rgx="(.*)(\\[c\\]$|_c$
   tx <- get.transport.info(model0, mets1.rgx, mets2.rgx)
   rxns <- lapply(tx, function(x) x$id)
   coefs <- lapply(tx, function(x) x$coef)
-  get.diff.comb.flux(model0, model1, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff)
+  get.diff.comb.flux(model0, model1, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
 }
 
-get.diff.flux.by.met <- function(model0, model1, mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6) {
+get.diff.flux.by.met <- function(model0, model1, mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # do differential flux analysis (model1 compared to model0, with wilcoxon tests) for the flux through each metabolite (i.e. either the production or consumption, they should be the same in magnitude, S*v=0 is assumed)
   # nsamples: a single number, meaning to use the last N samples
   # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
@@ -210,11 +210,11 @@ get.diff.flux.by.met <- function(model0, model1, mets="all", nsamples=4000, nc=1
   ns <- ncol(model1$sample$pnts)
   if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
   mat1 <- abs(model1$S[mets,,drop=FALSE]) %*% abs(model1$sample$pnts[, (ns-nsamples+1):ns]) / 2
-  res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff)
+  res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   res <- cbind(data.table(id=mets, met=model0$mets[mets], res))
 }
 
-get.diff.flux.by.met.x2 <- function(model, c0="cell1", c1="cell2", mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6) {
+get.diff.flux.by.met.x2 <- function(model, c0="cell1", c1="cell2", mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # diff.flux.by.met for bicellular model, between the two cells, i.e. c1 (_cell2) vs c0 (_cell1)
   # will just re-use get.diff.flux.by.met; but perform analysis always for all intracellular metabolites
   # in the result, metabolite id correspond to those in the single cellular model
@@ -238,7 +238,7 @@ get.diff.flux.by.met.x2 <- function(model, c0="cell1", c1="cell2", mets="all", n
   if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
   mat0 <- abs(model$S[m0,,drop=FALSE]) %*% abs(model$sample$pnts[m0, (ns-nsamples+1):ns]) / 2
   mat1 <- abs(model$S[m1,,drop=FALSE]) %*% abs(model$sample$pnts[m1, (ns-nsamples+1):ns]) / 2
-  res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff)
+  res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   res <- cbind(data.table(id=m0, met=mets, res))
 }
 
@@ -259,7 +259,7 @@ check.diff.flux.of.met <- function(model, dflux.res, mets) {
   })
 }
 
-pathway.gsea <- function(dflux.res, pathways, value.name="r", id.name="id") {
+pathway.gsea <- function(dflux.res, pathways, value.name="lfc.abs", id.name="rxn") {
   # metabolic pathway enrichment with gsea, from the result of differential flux analysis with get.diff.flux or get.diff.flux.by.met
   # value.name: the variable name in dflux.res for the measure of flux difference
   # id.name: the variable name in dflux.res for the reaction/metabolite id
