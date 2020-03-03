@@ -236,6 +236,7 @@ subsystems2gsets <- function(model, by=c("rxn","met"), exclude.mets=NULL, exclud
 
   # if by metabolite, exclude metabolites
   mets.rm <- get.exclude.mets(model, exclude.mets, exclude.mets.rgx, exclude.mets.degree)
+  mets.rm <- model$mets[mets.rm]
   gsets <- lapply(gsets, function(x) {
     mets <- rxns2mets(model, x, out="mets")
     mets <- unique(unlist(mets))
