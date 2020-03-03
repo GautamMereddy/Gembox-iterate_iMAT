@@ -7,6 +7,7 @@ all2idx <- function(model, x) {
   # convert rxns or mets to indices; if x is already numeric, return x as is; if x is logical, return(which(x))
   # for now, only convert rxns or mets; rxnNames, metNames and genes have duplications
 
+  if (is.null(x)) return(NULL)
   if (is.numeric(x)) return(x)
   if (is.logical(x)) return(which(x))
 
@@ -430,7 +431,7 @@ get.exclude.mets <- function(model, mets=NULL, rgx="default", degree=ncol(model$
   # degree: exclude metabolites with degree (number of edges to reactions) greater than this; default effect is that no further mets are excluded
 
   exclude.mets <- all2idx(model, mets)
-  exclude.mets <- c(exclude.mets, which(rowSums(model$S!=0)>degree))
+  exclude.mets <- c(exclude.mets, which(Matrix::rowSums(model$S!=0)>degree))
   if (!(is.null(rgx) || is.na(rgx) || rgx=="")) {
     if (rgx=="default") rgx <- "^h[\\[_].\\]?$|^oh1[\\[_].\\]?$|^h2o[\\[_].\\]?$|^atp[\\[_].\\]?$|^adp[\\[_].\\]?$|^pi[\\[_].\\]?$|^ppi[\\[_].\\]?$|^coa[\\[_].\\]?$|^o2[\\[_].\\]?$|^co2[\\[_].\\]?$|^nadp[\\[_].\\]?$|^nadph[\\[_].\\]?$|^nad[\\[_].\\]?$|^nadh[\\[_].\\]?$|^fad[\\[_].\\]?$|^fadh2[\\[_].\\]?$|^na1[\\[_].\\]?$|^so4[\\[_].\\]?$|^nh4[\\[_].\\]?$|^cl[\\[_].\\]?$"
     emd <- grep(rgx, model$mets)
