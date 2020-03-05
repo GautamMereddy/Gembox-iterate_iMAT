@@ -208,15 +208,22 @@ de2dflux <- function(model, x, na2zero=TRUE) {
   unname(res)
 }
 
-get.rxn.equations <- function(model, x, dir=1) {
+get.rxn.equations <- function(model, x, dir=1, use.names=FALSE) {
   # get equations of reactions
   # dir: if not default, should be a vector with the same length as x, representing their fluxes, then for reversible reations with negative fluxes the direction of the equations will be reversed
+  # use.names: if TRUE, use model$metNames with attempts to add compartment label; otherwise ues model$mets
 
   idx <- all2idx(model, x)
+  if (use.names) {
+    mets <- model$metNames
+    suffix <- stringr::str_match(model$mets, "[\\[_](.)\\]?$")[,2]
+    suffix <- paste0("[",stringr::str_sub(suffix,1,1),"]")
+    mets <- paste0(mets, suffix)
+  } else mets <- model$mets
   mapply(function(i, coef) {
     x <- model$S[,i]*sign(ifelse(coef==0, 1, coef))
-    rs <- paste(trimws(paste(ifelse(x[x<0]==-1,"",-x[x<0]), model$mets[x<0])), collapse=" + ")
-    ps <- paste(trimws(paste(ifelse(x[x>0]==1,"",x[x>0]), model$mets[x>0])), collapse=" + ")
+    rs <- paste(trimws(paste(ifelse(x[x<0]==-1,"",-x[x<0]), mets[x<0])), collapse=" + ")
+    ps <- paste(trimws(paste(ifelse(x[x>0]==1,"",x[x>0]), mets[x>0])), collapse=" + ")
     if (model$lb[i]>=0) arrow <- "-->" else arrow <- "<==>"
     paste(rs, arrow, ps)
   }, idx, dir, SIMPLIFY=TRUE)
