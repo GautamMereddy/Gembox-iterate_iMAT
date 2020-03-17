@@ -26,6 +26,7 @@
 # parameters for various algorithms
 .pkg.const$imat <- list(mode=0, nc=1L, nsteps=1, sol=0, sol.major.cutoff=0.667, flux.act=1, flux.inact=0.1, flux.delta=0.1, flux.delta.rel=0, flux.bound=1000)
 .pkg.const$mta <- list(v.min=-50, v.max=50, v.min.c=-1000, v.max.c=1000, alpha=0.9, epsil=0.01)
+.pkg.const$mep <- list(beta=1e9, damp=0.9, max.iter=2000, dlb=1e-50, dub=1e50, epsil=1e-6)
 
 # cplex solver status codes
 .pkg.const$cpx.stat.code = c(
@@ -116,7 +117,7 @@ solver <- function(x=c("","rcplex")) {
   invisible(cur.solver)
 }
 
-get.default.pars <- function(x=c("lp","qp","mip","samp","imat","mta"), print=TRUE) {
+get.default.pars <- function(x=c("lp","qp","mip","samp","imat","mep","mta"), print=TRUE) {
   # print and return the default values of parameters
   x <- match.arg(x)
   if (x %in% c("lp","qp","mip")) {
@@ -126,7 +127,7 @@ get.default.pars <- function(x=c("lp","qp","mip","samp","imat","mta"), print=TRU
   invisible(res)
 }
 
-get.pars <- function(x=c("lp","qp","mip","samp","imat","mta"), pars) {
+get.pars <- function(x=c("lp","qp","mip","samp","imat","mep","mta"), pars) {
   # a helper function used in other functions to set parameters based on the default parameters and a list of pars
   x <- match.arg(x)
   default.pars <- get.default.pars(x, print=FALSE)

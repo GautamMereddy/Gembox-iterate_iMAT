@@ -5,3 +5,7 @@ achr <- function(model, state, warmupPnts, nPnts, stepsPerPnt) {
     .Call('_gembox_achr', PACKAGE = 'gembox', model, state, warmupPnts, nPnts, stepsPerPnt)
 }
 
+mepc <- function(model, beta, damp, maxIter, dlb, dub, epsil, ff, fIdx, fMeans, fVars) {
+    .Call('_gembox_mepc', PACKAGE = 'gembox', model, beta, damp, maxIter, dlb, dub, epsil, ff, fIdx, fMeans, fVars)
+}
+
