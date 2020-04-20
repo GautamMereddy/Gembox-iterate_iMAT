@@ -38,27 +38,39 @@ get.biomass.idx <- function(model, rgx="biomass") {
   res
 }
 
-get.transport.info <- function(model, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx="(.*)(\\[e\\]$|_e$)") {
+get.transport.info <- function(model, mets="all", c1="c", c2="e") {
   # get the info on metabolites that are transported across membrane, between two compartments
-  # mets1.rgx and mets2.rgx: regex for the metabolites in two compartments
-  # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment label; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met matched by mets1.rgx in the rxn); gene (transporter genes mapped to rxn)
+  # mets: metabolites of interest, give as ID as in model$mets but w/o compartment suffix; default to "all" (all possible metabolites across the two compartments as specificed with c1 and c2)
+  # c1 and c2: two compartments
+  # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment suffix; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met in c1 in the rxn); equ (reaction equation); gene (transporter genes mapped to rxn)
 
+  mets.in <- mets
+  mets1.rgx <- paste0("(.*)(\\[",c1,"\\]$|_",c1,"$)")
+  mets2.rgx <- paste0("(.*)(\\[",c2,"\\]$|_",c2,"$)")
   mets1 <- stringr::str_match(model$mets, mets1.rgx)
   mets2 <- stringr::str_match(model$mets, mets2.rgx)
   mets <- intersect(mets1[,2], mets2[,2])
+  if (length(mets.in)==1 && mets.in!="all" || length(mets.in)>1) mets <- intersect(mets, mets.in)
   mets <- mets[!is.na(mets)]
+  if (length(mets)==0) {
+    warning("No transportation reaction is found, NULL returned.")
+    return(NULL)
+  }
   mets1 <- all2idx(model, mets1[match(mets, mets1[,2]), 1])
   mets2 <- all2idx(model, mets2[match(mets, mets2[,2]), 1])
   tmpf <- function(m1, m2) {
     rxns <- intersect(mets2rxns(model, m1)[[1]], mets2rxns(model, m2)[[1]])
     if (is.null(rxns)) return(NULL)
     coefs <- model$S[m1, rxns]
-    data.table(id=rxns, rxn=model$rxns[rxns], coef=coefs, gene=rxns2genes(model, rxns))
+    data.table(id=rxns, rxn=model$rxns[rxns], coef=coefs, equ=get.rxn.equations(model, rxns), gene=rxns2genes(model, rxns))
   }
   res <- mapply(tmpf, mets1, mets2, SIMPLIFY=FALSE)
   names(res) <- mets
   res <- res[!sapply(res, is.null)]
-  if (length(res)==0) stop("No transportation reaction is found.")
+  if (length(res)==0) {
+    warning("No transportation reaction is found, NULL returned.")
+    return(NULL)
+  }
   res
 }
 
@@ -395,6 +407,31 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1
     if (!is.null(ubs)) model$ub[x] <- ubs
   }
   model
+}
+
+set.medium <- function(model, medium, cells.per.ml=2e5, cell.gdw=4e-10, dbl.hr=24) {
+  # set model constraint based on medium composition
+  # medium: a data.table with the first column being names of metabolites as in model$mets (but w/o compartment suffix), second column being concentration in mM in the medium
+  # cells.per.ml: cell count per mL; cell.gdw: dry weight per cell in grams; dbl.hr: cell doubling time in hours (default to approximate values for HeLa cells in a reasonably normal culture)
+  # for metabolites transported by a single reaction, the corresponding lb or ub will be adjusted; for metabolites transported by multiple reactions, will add rows to model$S constraining the summed transport fluxes
+  # metabolites whose info is not given in medium is not touched (regarded as unknown rather than definitely not present in the medium)
+
+  m <- copy(as.data.table(medium))
+  setnames(m, c("met", "conc"))
+  tx <- get.transport.info(model, m$met, "e", "c")
+  conc <- m[match(names(tx), met), -conc] / (1000*cells.per.ml*cell.gdw*dbl.hr)
+
+  for (i in 1:length(tx)) {
+    x <- tx[[i]]
+    if (nrow(x)==1) {
+      bnd <- conc[i] / x$coef
+      if (x$coef>0 && bnd>model$lb[x$id]) model <- set.rxn.bounds(model, x$id, lbs=bnd)
+      if (x$coef<0 && bnd<model$ub[x$id]) model <- set.rxn.bounds(model, x$id, ubs=bnd)
+    } else {
+      model <- add.constraint(model, x$id, x$coef, conc[i], 1e10)
+    }
+  }
+  model 
 }
 
 rm.blocked.rxns <- function(model, nc=1L, rm.extra=FALSE, update.genes=FALSE, solv.pars=get.pars("lp", list())) {
