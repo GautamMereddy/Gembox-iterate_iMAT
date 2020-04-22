@@ -270,6 +270,10 @@ pathway.gsea <- function(dflux.res, pathways, value.name="lfc.abs", id.name="rxn
 
   vec <- dflux.res[[value.name]]
   names(vec) <- dflux.res[[id.name]]
+  idx <- is.finite(vec)
+  ninf <- sum(!idx)
+  if (ninf!=0) warning(sprintf("Removed %d items with infinite %s values.", ninf, value.name))
+  vec <- vec[idx]
   res <- fgsea::fgsea(pathways, vec, nperm=1e4)
   res <- res[order(padj, pval)]
 }
