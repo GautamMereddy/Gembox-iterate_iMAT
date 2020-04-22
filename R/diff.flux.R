@@ -181,15 +181,15 @@ get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","f
   res <- cbind(data.table(id=tmp, res))
 }
 
-get.diff.transport.flux <- function(model0, model1, mets1.rgx="(.*)(\\[c\\]$|_c$)", mets2.rgx="(.*)(\\[e\\]$|_e$)", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.transport.flux <- function(model0, model1, c1="c", c2="e", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # do differential flux analysis (model1 compared to model0) for transportation reactions (i.e. reactions of metabolites being transported between two compartments)
-  # mets1.rgx and mets2.rgx: regex for the metabolites in the two compartments
+  # c1 and c2: the two compartments for the transport
   # this function will do df of the net (summed) fluxes for each metabolite being transported from compartment 2 to compartment 1
   # method: df method to use
   # nsamples: a single number, meaning to use the last N samples
   # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
 
-  tx <- get.transport.info(model0, mets1.rgx, mets2.rgx)
+  tx <- get.transport.info(model0, c1=c1, c2=c2)
   rxns <- lapply(tx, function(x) x$id)
   coefs <- lapply(tx, function(x) x$coef)
   get.diff.comb.flux(model0, model1, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
