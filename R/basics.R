@@ -60,7 +60,7 @@ get.transport.info <- function(model, mets="all", c1="c", c2="e") {
   mets2 <- all2idx(model, mets2[match(mets, mets2[,2]), 1])
   tmpf <- function(m1, m2) {
     rxns <- intersect(mets2rxns(model, m1)[[1]], mets2rxns(model, m2)[[1]])
-    if (is.null(rxns)) return(NULL)
+    if (length(rxns)==0) return(NULL)
     coefs <- model$S[m1, rxns]
     data.table(id=rxns, rxn=model$rxns[rxns], coef=coefs, equ=get.rxn.equations(model, rxns), gene=rxns2genes(model, rxns))
   }
