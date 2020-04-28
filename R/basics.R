@@ -409,17 +409,23 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1
   model
 }
 
-set.medium <- function(model, medium, cells.per.ml=2e5, cell.gdw=4e-10, dbl.hr=24) {
+set.medium <- function(model, medium, set.all=FALSE, except=c("h","na1","k","nh4","ca2","fe2","oh1","cl","hco3","ac","so4","pi","h2o","o2","co2"), cells.per.ml=2e5, cell.gdw=4e-10, dbl.hr=24) {
   # set model constraint based on medium composition
   # medium: a data.table with the first column being names of metabolites as in model$mets (but w/o compartment suffix), second column being concentration in mM in the medium
   # cells.per.ml: cell count per mL; cell.gdw: dry weight per cell in grams; dbl.hr: cell doubling time in hours (default to approximate values for HeLa cells in a reasonably normal culture)
   # for metabolites transported by a single reaction, the corresponding lb or ub will be adjusted; for metabolites transported by multiple reactions, will add rows to model$S constraining the summed transport fluxes
-  # metabolites whose info is not given in medium is not touched (regarded as unknown rather than definitely not present in the medium)
+  # if set.all==FALSE, metabolites whose info is not given in medium is not touched (regarded as unknown rather than not present in the medium); otherwise, all other non-specified extracellular metabolites (excluding those given in except, e.g. bulk inorganic species) are constrained to be export only
 
   m <- copy(as.data.table(medium))
   setnames(m, c("met", "conc"))
-  tx <- get.transport.info(model, m$met, "e", "c")
+  if (set.all) {
+    tx <- get.transport.info(model, c1="e", c2="c")
+    tx <- tx[!names(tx) %in% except]
+  } else {
+    tx <- get.transport.info(model, m$met, "e", "c")
+  }
   conc <- m[match(names(tx), met), -conc] / (1000*cells.per.ml*cell.gdw*dbl.hr)
+  conc[is.na(conc)] <- 0
 
   for (i in 1:length(tx)) {
     x <- tx[[i]]
