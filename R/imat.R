@@ -193,7 +193,6 @@ imat.mode1 <- function(imat.model, imat.pars, solv.pars) {
   # return a list(solver.out, flux.int.imat), solver.out is a data.table of the optimal iMAT objectives for all rxns, flux.int.imat is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
   solv.pars$nsol <- 1
-  solv.pars$tilim <- 120
   rxns <- which(imat.model$var.ind=="v")
   names(rxns) <- imat.model$rxns[rxns]
   obj <- rbindlist(parallel::mclapply(rxns, function(i) {
@@ -241,7 +240,6 @@ imat.mode2 <- function(imat.model, imat.pars, solv.pars) {
   # return a list(solver.out, flux.int.imat), solver.out is a data.table of the min/max fluxes for all rxns, flux.int.imat is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
   solv.pars$nsol <- 1
-  solv.pars$tilim <- 120
   obj.opt <- solve.model(imat.model, pars=solv.pars)[[1]]$obj
   imat.model.opt <- add.constraint(imat.model, 1:length(imat.model$c), imat.model$c, obj.opt, obj.opt)
   fva.res <- fva(imat.model.opt, rxns="all", nc=imat.pars$nc, solv.pars=solv.pars)
