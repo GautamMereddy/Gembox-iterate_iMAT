@@ -241,7 +241,7 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=1
 
   # rMTA score
   res <- data.table(id=res$id, rxn=res$rxn, bTS=res$score.mta, wTS=res0$score.mta, mTS=res.moma$score.mta)
-  res[, rTS:=ifelse(bTS>0 & mTS>0 & wTS<0, mta.pars$k*mTS*(bTS-wTS), mTS)]
+  res[, rTS:=ifelse(bTS>0 & mTS>0 & wTS<0, k*mTS*(bTS-wTS), mTS)]
 
   list(metal.model=metal.model, result.metal=res, result.moma=res.moma, result.rmetal=res)
 }
