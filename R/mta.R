@@ -173,14 +173,14 @@ rmta <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=100
   # rxns are the indices or IDs or rxns to run MTA on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
   # nc: number of cores to use for rxns
   # detail: whether to return more details or only the MTA scores
-  # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(mta.model, scores)
+  # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(mta.model, result.mta, result.moma, result.rmta)
 
   # formulate MTA model for either direction (dflux and -dflux)
   mta.model <- form.mta(model, flux0, dflux, mta.pars)
   mta.model0 <- form.mta(model, flux0, -dflux, mta.pars)
   # solve the MTA models across the rxns for both models
   message("rmta(): Running MTA for dflux.")
-  res <- run.ko.screen(mta.model, rxns, run.mta, solv.pars=mip.pars, detail=detail, nc=nc)
+  res1 <- run.ko.screen(mta.model, rxns, run.mta, solv.pars=mip.pars, detail=detail, nc=nc)
   message("rmta(): Running MTA for -dflux.")
   res0 <- run.ko.screen(mta.model0, rxns, run.mta, solv.pars=mip.pars, detail=FALSE, nc=nc)
 
@@ -190,10 +190,10 @@ rmta <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=100
   res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=qp.pars)
 
   # rMTA score
-  res <- data.table(id=res$id, rxn=res$rxn, bTS=res$score.mta, wTS=res0$score.mta, mTS=res.moma$score.mta)
+  res <- data.table(id=res1$id, rxn=res1$rxn, bTS=res1$score.mta, wTS=res0$score.mta, mTS=res.moma$score.mta)
   res[, rTS:=ifelse(bTS>0 & mTS>0 & wTS<0, k*mTS*(bTS-wTS), mTS)]
 
-  list(mta.model=mta.model, result.mta=res, result.moma=res.moma, result.rmta=res)
+  list(mta.model=mta.model, result.mta=res1, result.moma=res.moma, result.rmta=res)
 }
 
 

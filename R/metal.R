@@ -223,14 +223,14 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=1
   # rxns are the indices or IDs or rxns to run MTA on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
   # nc: number of cores to use for rxns
   # detail: whether to return more details or only the MTA scores
-  # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(mta.model, scores)
+  # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result.metal, result.moma, result.rmetal)
 
   # formulate metal model for either direction (dflux and -dflux)
   metal.model <- form.metal(model, flux0, dflux)
   metal.model0 <- form.metal(model, flux0, -dflux)
   # solve the MTA models across the rxns for both models
   message("rmetal(): Running metal for dflux.")
-  res <- run.ko.screen(metal.model, rxns, run.metal, solv.pars=lp.pars, detail=detail, nc=nc)
+  res1 <- run.ko.screen(metal.model, rxns, run.metal, solv.pars=lp.pars, detail=detail, nc=nc)
   message("rmetal(): Running metal for -dflux.")
   res0 <- run.ko.screen(metal.model0, rxns, run.metal, solv.pars=lp.pars, detail=FALSE, nc=nc)
 
@@ -240,10 +240,10 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=1
   res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=qp.pars)
 
   # rMTA score
-  res <- data.table(id=res$id, rxn=res$rxn, bTS=res$score.mta, wTS=res0$score.mta, mTS=res.moma$score.mta)
+  res <- data.table(id=res1$id, rxn=res1$rxn, bTS=res1$score.mta, wTS=res0$score.mta, mTS=res.moma$score.mta)
   res[, rTS:=ifelse(bTS>0 & mTS>0 & wTS<0, k*mTS*(bTS-wTS), mTS)]
 
-  list(metal.model=metal.model, result.metal=res, result.moma=res.moma, result.rmetal=res)
+  list(metal.model=metal.model, result.metal=res1, result.moma=res.moma, result.rmetal=res)
 }
 
 
