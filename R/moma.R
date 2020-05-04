@@ -15,7 +15,7 @@ moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", bioma
   # rxns are the indices or IDs or rxns to run moma on, by default all rxns; nc: number of cores
   # biomass.rgx is the regex used to find the biomass rxn
 
-  bm.idx <- get.biomass.idx(model, biomass.rgx)
+  if (flux0=="biomass" || obj=="biomass") bm.idx <- get.biomass.idx(model, biomass.rgx)
   if (length(flux0)==1 && is.character(flux0)) {
     if (flux0=="biomass") {
       flux0 <- get.opt.flux(model, rxns=bm.idx, xopt=TRUE)$xopt
