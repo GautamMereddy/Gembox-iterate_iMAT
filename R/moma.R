@@ -15,9 +15,9 @@ moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", bioma
   # rxns are the indices or IDs or rxns to run moma on, by default all rxns; nc: number of cores
   # biomass.rgx is the regex used to find the biomass rxn
 
-  if (flux0=="biomass" || obj=="biomass") bm.idx <- get.biomass.idx(model, biomass.rgx)
   if (length(flux0)==1 && is.character(flux0)) {
     if (flux0=="biomass") {
+      bm.idx <- get.biomass.idx(model, biomass.rgx)
       flux0 <- get.opt.flux(model, rxns=bm.idx, xopt=TRUE)$xopt
     } else if (flux0=="max.c") {
       flux0 <- get.opt.flux(model, 1:ncol(model$S), model$c, xopt=TRUE)$xopt
@@ -29,7 +29,10 @@ moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", bioma
   }
 
   if (length(obj)==1 && is.character(obj)) {
-    if (obj=="biomass") obj <- function(x) data.table(obj=x[[1]]$xopt[bm.idx])
+    if (obj=="biomass") {
+      bm.idx <- get.biomass.idx(model, biomass.rgx)
+      obj <- function(x) data.table(obj=x[[1]]$xopt[bm.idx])
+    }
     if (obj=="c") obj <- function(x) data.table(obj=sum(x[[1]]$xopt*model$c))
   } else if (!is.function(obj)) stop("Invalid value for the obj argument.")
   moma0 <- function(model, flux0, obj, pars) obj(minimize.dflux(model, flux0, pars))
