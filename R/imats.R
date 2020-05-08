@@ -147,7 +147,7 @@ form.imat.dflux <- function(model1, model2=model1, dflux, imat.pars) {
   model$csense <- "max"
 
   nc1 <- ncol(model1$S)
-  if (all(dflux %in% c(-1,0,1,NA))) dflux <- dflux / sum(abs(dflux), na.rm=TRUE) # automatically re-weight dflux if dflux is among {-1,0,1,NA}
+  if (all(dflux %in% c(-1,0,1,NA))) dflux <- dflux / sum(dflux!=0,na.rm=TRUE) # automatically re-weight dflux if dflux is among {-1,0,1,NA}
   for (i in 1:length(dflux)) {
     rr <- model1$lb[i]<0 # use model1 is OK since even if it's updated by iMAT the reversibilities of reactions don't change
     model <- form.imat.dflux0(model, i, nc1+i, dflux[i], 1/sum(dflux==0,na.rm=TRUE), rr, pars)
@@ -293,34 +293,38 @@ form.imat.dflux.mc <- function(model, dflux, imat.pars=list()) {
 
   # model of two cells
   if (!is.list(dflux)) {
+    if (all(dflux %in% c(-1,0,1,NA))) dflux <- dflux / sum(dflux!=0,na.rm=TRUE) # automatically re-weight dflux if dflux is among {-1,0,1,NA}
     for (i in 1:n) {
       rr <- model$lb[irxns[i]]<0
       i1 <- irxns[i]
       i2 <- nc + i
       df <- dflux[i]
-      res.model <- form.imat.dflux0(res.model, i1, i2, df, rr, pars)
+      res.model <- form.imat.dflux0(res.model, i1, i2, df, 1/sum(dflux==0,na.rm=TRUE), rr, pars)
     }
   }
 
   # model of three cells
   if (is.list(dflux) && length(dflux)==3) {
+    if (all(dflux$d12 %in% c(-1,0,1,NA))) dflux$d12 <- dflux$d12 / sum(dflux$d12!=0,na.rm=TRUE) # automatically re-weight dflux if dflux is among {-1,0,1,NA}
+    if (all(dflux$d23 %in% c(-1,0,1,NA))) dflux$d23 <- dflux$d23 / sum(dflux$d23!=0,na.rm=TRUE) # automatically re-weight dflux if dflux is among {-1,0,1,NA}
+    if (all(dflux$d13 %in% c(-1,0,1,NA))) dflux$d13 <- dflux$d13 / sum(dflux$d13!=0,na.rm=TRUE) # automatically re-weight dflux if dflux is among {-1,0,1,NA}
     for (i in 1:n) {
       rr <- model$lb[irxns[i]]<0
       # 1--2
       i1 <- irxns[i]
       i2 <- nc - n + i
       df <- dflux$d12[i]
-      res.model <- form.imat.dflux0(res.model, i1, i2, df, rr, pars)
+      res.model <- form.imat.dflux0(res.model, i1, i2, df, 1/sum(dflux$d12==0,na.rm=TRUE), rr, pars)
       # 2--3
       i1 <- nc - n + i
       i2 <- nc + i
       df <- dflux$d23[i]
-      res.model <- form.imat.dflux0(res.model, i1, i2, df, rr, pars)
+      res.model <- form.imat.dflux0(res.model, i1, i2, df, 1/sum(dflux$d23==0,na.rm=TRUE), rr, pars)
       # 1--3
       i1 <- irxns[i]
       i2 <- nc + i
       df <- dflux$d13[i]
-      res.model <- form.imat.dflux0(res.model, i1, i2, df, rr, pars)
+      res.model <- form.imat.dflux0(res.model, i1, i2, df, 1/sum(dflux$d13==0,na.rm=TRUE), rr, pars)
     }
   }
 
