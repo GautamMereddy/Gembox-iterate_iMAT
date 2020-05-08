@@ -147,10 +147,13 @@ form.imat.dflux <- function(model1, model2=model1, dflux, imat.pars) {
   model$csense <- "max"
 
   nc1 <- ncol(model1$S)
-  dflux <- dflux / sum(abs(dflux), na.rm=TRUE) # automatically re-weight dflux
+  if (all(dflux %in% c(-1,0,1,NA))) dflux <- dflux / sum(abs(dflux), na.rm=TRUE) # automatically re-weight dflux if dflux is among {-1,0,1,NA}
   for (i in 1:length(dflux)) {
     rr <- model1$lb[i]<0 # use model1 is OK since even if it's updated by iMAT the reversibilities of reactions don't change
-    model <- form.imat.dflux0(model, i, nc1+i, dflux[i], 1/sum(dflux==0,na.rm=TRUE), rr, pars) # note that weights z0, i.e. for the dflux==0 cases are automatically assigned
+    model <- form.imat.dflux0(model, i, nc1+i, dflux[i], 1/sum(dflux==0,na.rm=TRUE), rr, pars)
+    # note that weights for z0, i.e. for the dflux==0 cases are forced assigned to 1/#{dflux==0};
+    # but weights for z+ and z-, i.e. for the dflux!=0 cases are only automatially assigned if dflux is among {-1,0,1,NA};
+    # so the relative weight between the dflux==0 and dflux!=0, as well as the relative weight among different dflux!=0 reactions ccan be customized by adjusting values of dflux where dflux!=0
   }
   model
 }
