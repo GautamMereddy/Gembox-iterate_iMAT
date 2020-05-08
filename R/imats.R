@@ -47,12 +47,13 @@ imat2 <- function(model, expr1, expr2, dflux, imat.pars=list(), solv.pars=list()
 
 ### --- helper functions for iMAT for two samples --- ###
 
-form.imat.dflux0 <- function(model, i1, i2, df, rr, pars) {
+form.imat.dflux0 <- function(model, i1, i2, df, w0, rr, pars) {
   # a helper function to formulate the differential flux part of iMATs
-  # this function adds model constrains for the df of a single pair of rxns; i1 and i2 are their indices, df is the diff flux; rr is T/F to mark whether the pair or rxns are reversible
+  # this function adds model constrains for the df of a single pair of rxns; i1 and i2 are their indices, df is the diff flux; w0 is the weight (coefficient) for z0 (corresponding to when df==0); rr is T/F to mark whether the pair or rxns are reversible
   # pars: a list of parameters (imat.pars)
 
   S <- model$S
+  if (is.na(df)) return(model) # if diff flux is NA, do nothing
   if (df==0) { # z0
     S <- rbind(cbind(S, sparseMatrix(NULL,NULL,dims=c(nrow(S),1))),
                sparseMatrix(rep(1,3), c(i1, i2, ncol(S)+1), x=c(1, -1, 2*pars$flux.bound-pars$flux.delta), dims=c(1, ncol(S)+1)),
@@ -61,7 +62,7 @@ form.imat.dflux0 <- function(model, i1, i2, df, rr, pars) {
     model$rowub <- c(model$rowub, rep(2*pars$flux.bound, 2))
     model$lb <- c(model$lb, 0)
     model$ub <- c(model$ub, 1)
-    model$c <- c(model$c, 1)
+    model$c <- c(model$c, w0)
     model$vtype <- c(model$vtype, "I")
     model$var.ind <- c(model$var.ind, "z0")
   } else {
@@ -77,7 +78,7 @@ form.imat.dflux0 <- function(model, i1, i2, df, rr, pars) {
     model$rowub <- c(model$rowub, (2-pars$flux.delta.rel)*pars$flux.bound)
     model$lb <- c(model$lb, 0)
     model$ub <- c(model$ub, 1)
-    model$c <- c(model$c, 1)
+    model$c <- c(model$c, abs(df))
     model$vtype <- c(model$vtype, "I")
     model$var.ind <- c(model$var.ind, "z+")
     # if reversible rxn, need to add an extra constraint on z+, and similarly a pair of constraints on z-, and the constraint that (z+) + (z-) <= 1
@@ -103,7 +104,7 @@ form.imat.dflux0 <- function(model, i1, i2, df, rr, pars) {
       model$rowub <- c(model$rowub, rep((2-pars$flux.delta.rel)*pars$flux.bound, 3), 1)
       model$lb <- c(model$lb, 0)
       model$ub <- c(model$ub, 1)
-      model$c <- c(model$c, 1)
+      model$c <- c(model$c, abs(df))
       model$vtype <- c(model$vtype, "I")
       model$var.ind <- c(model$var.ind, "z-")
     }
@@ -146,9 +147,10 @@ form.imat.dflux <- function(model1, model2=model1, dflux, imat.pars) {
   model$csense <- "max"
 
   nc1 <- ncol(model1$S)
+  dflux <- dflux / sum(abs(dflux), na.rm=TRUE) # automatically re-weight dflux
   for (i in 1:length(dflux)) {
     rr <- model1$lb[i]<0 # use model1 is OK since even if it's updated by iMAT the reversibilities of reactions don't change
-    model <- form.imat.dflux0(model, i, nc1+i, dflux[i], rr, pars)
+    model <- form.imat.dflux0(model, i, nc1+i, dflux[i], 1/sum(dflux==0,na.rm=TRUE), rr, pars) # note that weights z0, i.e. for the dflux==0 cases are automatically assigned
   }
   model
 }
