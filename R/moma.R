@@ -32,8 +32,7 @@ moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", bioma
     if (obj=="biomass") {
       bm.idx <- get.biomass.idx(model, biomass.rgx)
       obj <- function(x) data.table(obj=x[[1]]$xopt[bm.idx])
-    }
-    if (obj=="c") obj <- function(x) data.table(obj=sum(x[[1]]$xopt*model$c))
+    } else if (obj=="c") obj <- function(x) data.table(obj=sum(x[[1]]$xopt*model$c))
   } else if (!is.function(obj)) stop("Invalid value for the obj argument.")
   moma0 <- function(model, flux0, obj, pars) obj(minimize.dflux(model, flux0, pars))
 
