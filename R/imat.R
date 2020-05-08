@@ -70,7 +70,7 @@ form.imat <- function(model, expr, imat.pars) {
   S <- model$S
 
   # 1. Active reactions: specify the y+ indicator variables, representing activation in the forward direction (i.e. v>flux.act)
-  rxns.act <- which(rxns.int==1)
+  rxns.act <- which(rxns.int>0)
   n.act <- length(rxns.act)
   if (n.act!=0) {
     m1 <- sparseMatrix(1:n.act, rxns.act, dims=c(n.act, n.rxns))
@@ -80,7 +80,7 @@ form.imat <- function(model, expr, imat.pars) {
 
   # 2. Reversible active reactions: for those reversible ones among the active reactions, specify the extra y- indicator variables, representing activation in the backward direction (i.e. v<-flux.act)
   # thus, an reversible active reaction has both the y+ and y- indicator variables, because it can be active in either direction (but never both, i.e. 1 XOR 2)
-  rxns.act.rev <- which(rxns.int==1 & model$lb<0)
+  rxns.act.rev <- which(rxns.int>0 & model$lb<0)
   n.act.rev <- length(rxns.act.rev)
   if (n.act.rev!=0) {
     m1 <- sparseMatrix(1:n.act.rev, rxns.act.rev, dims=c(n.act.rev, ncol(S)))
@@ -90,7 +90,7 @@ form.imat <- function(model, expr, imat.pars) {
 
   # 3. Inactive reactions: specify the y0 indicator variables
   # 3a. specify inactivation in the forward direction (i.e. v<flux.inact)
-  rxns.inact <- which(rxns.int==-1)
+  rxns.inact <- which(rxns.int<0)
   n.inact <- length(rxns.inact)
   if (n.inact!=0) {
     m1 <- sparseMatrix(1:n.inact, rxns.inact, dims=c(n.inact, ncol(S)))
@@ -99,7 +99,7 @@ form.imat <- function(model, expr, imat.pars) {
   }
   # 3b. for those reversible inactive reactions, need to further specify inactivation in the backward direction (i.e. v>-flux.inact)
   # note that a reversible inactive reaction has only one y0 indicator variable, because for these reactions we want -flux.inact<v<flux.inact (3a AND 3b)
-  rxns.inact.rev <- which(rxns.int==-1 & model$lb<0)
+  rxns.inact.rev <- which(rxns.int<0 & model$lb<0)
   n.inact.rev <- length(rxns.inact.rev)
   if (n.inact.rev!=0) {
     m3 <- sparseMatrix(1:n.inact.rev, rxns.inact.rev, dims=c(n.inact.rev, ncol(S)-n.inact))
@@ -112,7 +112,7 @@ form.imat <- function(model, expr, imat.pars) {
   rowlb <- c(model$rowlb, rep(-pars$flux.bound, n))
   rowub <- c(model$rowub, rep(pars$flux.bound, n))
   n <- ncol(S) - n.rxns
-  c <- rep(c(0,1), c(n.rxns, n))
+  c <- rep(c(0, 1/sum(rxns.int!=0,na.rm=TRUE)), c(n.rxns, n))
   vtype <- ifelse(c==1, "I", "C")
   lb <- c(model$lb, rep(0, n))
   ub <- c(model$ub, rep(1, n))
