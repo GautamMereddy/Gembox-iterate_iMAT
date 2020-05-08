@@ -8,15 +8,15 @@ all2idx <- function(model, x) {
   # for now, only convert rxns or mets; rxnNames, metNames and genes have duplications
 
   if (is.null(x)) return(NULL)
+  if (is.na(x)) return(NA)
   if (is.numeric(x)) return(x)
   if (is.logical(x)) return(which(x))
 
   tmpf <- function(name, x) {
     if (any(x %in% model[[name]])) {
-      message("all2idx(): Input as ", name, ".")
       res <- match(x, model[[name]])
       tmp <- is.na(res)
-      if (any(tmp)) warning("NA's returned for these IDs not found: ", paste(x[tmp], collapse=", "), ".", call.=FALSE, immediate.=TRUE)
+      if (any(tmp)) warning("NA's returned for these IDs not found: ", paste(x[tmp], collapse=", "), ".", immediate.=TRUE)
       res
     } else NULL
   }

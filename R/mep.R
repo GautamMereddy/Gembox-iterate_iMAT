@@ -36,6 +36,7 @@ mep <- function(model, nc=1L, fix.flux=FALSE, fflux.id=0, fflux.mean=0, fflux.va
   # pre-process model by removing fixed reactions (i.e. lb==ub via FVA)
   message("Pre-processing model...")
   model1 <- rm.fixed.rxns(model, nc=nc)
+  message("Done pre-processing model.")
 
   # run MEP
   mep.res <- mepc(model1$model, pars$beta, pars$damp, pars$max.iter, pars$dlb, pars$dub, pars$epsil, fix.flux, fflux.id, fflux.mean, fflux.var)

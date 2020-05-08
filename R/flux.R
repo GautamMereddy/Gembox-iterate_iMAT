@@ -37,7 +37,14 @@ get.opt.fluxes <- function(model, rxns="all", dir="max", nc=1L, solv.pars=get.pa
   if (length(rxns)==1 && rxns=="all") {
     rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
   } else rxns <- all2idx(model, rxns)
-  res <- unlist(parallel::mclapply(rxns, get.opt.flux, model=model, dir=dir, solv.pars=solv.pars, mc.cores=nc))
+  pb <- round(seq(0.1,0.9,by=0.1)*length(rxns))
+  message("0%...", appendLF=FALSE)
+  res <- unlist(parallel::mclapply(1:length(rxns), function(i) {
+    a <- match(i,pb)
+    if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
+    get.opt.flux(model=model, rxns=rxns[i], dir=dir, solv.pars=solv.pars, mc.cores=nc)
+  }))
+  message("100%")
   names(res) <- model$rxns[rxns]
   res
 }
@@ -55,8 +62,11 @@ fva <- function(model, rxns="all", nc=1L, max.biomass=FALSE, biomass.rgx="biomas
     bm.idx <- get.biomass.idx(model, biomass.rgx)
     model <- set.rxn.bounds(model, bm.idx, lbs=1, ubs=1, relative=TRUE, nc=1L, solv.pars)
   }
+  message("FVA: computing minimal fluxes, progress:")
   min <- get.opt.fluxes(model, rxns, "min", nc, solv.pars)
+  message("FVA: computing maximal fluxes, progress:")
   max <- get.opt.fluxes(model, rxns, "max", nc, solv.pars)
+  message("Done FVA.")
   data.table(id=rxns, rxn=model$rxns[rxns], vmin=min, vmax=max)
 }
 
@@ -89,13 +99,17 @@ run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) 
 
   tmp <- 1:length(rxns)
   names(tmp) <- names(rxns)
+  pb <- round(seq(0.1,0.9,by=0.1)*length(rxns))
+  message("Begin KO screen, progress:\n0%...", appendLF=FALSE)
   res <- parallel::mclapply(tmp, function(i) {
-    message("run.ko.screen(): Run #", i, ".")
+    a <- match(i,pb)
+    if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
     m <- model
     m$lb[rxns[i]] <- 0 # if rxns[i]==0, lb will not be changed (i.e. the control)
     m$ub[rxns[i]] <- 0 # if rxns[i]==0, ub will not be changed (i.e. the control)
     f(m, ...)
   }, mc.cores=nc)
+  message("100%\nDone KO screen.")
 
   if (simplify) {
     if (any(!sapply(res, is.data.table))) {

@@ -158,7 +158,7 @@ get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","f
   # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
 
   if (!is.list(rxns) || !is.list(coefs)) stop("rxns and coefs should both be lists.")
-  rxns <- lapply(rxns, all2idx, model=model0)
+  suppressMessages( rxns <- lapply(rxns, all2idx, model=model0) )
   method <- match.arg(method)
   if (method %in% c("wilcox","both")) {
     if (!"sample" %in% names(model0) || !"sample" %in% names(model1)) stop("No sampling result found in models, cannot use method 'wilcox' or 'both'.")

@@ -38,14 +38,13 @@ sample.warmup.pnts <- function(model, n, nc) {
     n <- 2*n.rxns
     warning(sprintf("#{warmup points} should be at least 2*#{reactions}=%d.", 2*n.rxns), immediate.=TRUE)
   }
-  message("Will generate ", n, " warmup points.")
-  message("Begin generating warmup points...")
+  message("Begin generating ", n, " warmup points...")
   orth.pnts <- get.orth.pnts(model, n, nc)
   rand.pnts <- get.rand.pnts(model, n, nc)
   r <- rep(runif(n), each=n.rxns)
   dim(r) <- c(n.rxns, n)
   res <- orth.pnts*r + rand.pnts*(1-r)
-  message("Finished generating warmup points.")
+  message("Done generating warmup points.")
   res
 }
 
@@ -61,10 +60,8 @@ get.orth.pnts <- function(model, n, nc) {
   } else {
     mat <- cbind(mat[, sample(2*n.rxns)], mat[, sample(2*n.rxns, n-2*n.rxns, replace=TRUE)])
   }
-  cl <- parallel::makeCluster(nc, type="FORK")
-  res <- parallel::parApply(cl, mat, 2, get.opt.pnt, model=model)
-  parallel::stopCluster(cl)
-  res
+  message("1. Generating orthogonal points, progress:")
+  get.opt.pnts(model, mat)
 }
 
 get.rand.pnts <- function(model, n, nc) {
@@ -75,15 +72,20 @@ get.rand.pnts <- function(model, n, nc) {
   n.rxns <- ncol(model$S)
   cs <- runif(n.rxns*n) - 0.5
   dim(cs) <- c(n.rxns, n)
-  cl <- parallel::makeCluster(nc, type="FORK")
-  res <- parallel::parApply(cl, cs, 2, get.opt.pnt, model=model)
-  parallel::stopCluster(cl)
+  message("2. Generating random points, progress:")
+  get.opt.pnts(model, cs)
+}
+
+get.opt.pnts <- function(model, mat) {
+  # a helper function to get optimal points corresponding to running LPs with objective function coefficients being the columns of mat, for ACHR
+
+  pb <- round(seq(0.1,0.9,by=0.1)*ncol(mat))
+  message("0%...", appendLF=FALSE)
+  res <- do.call(cbind, mclapply(1:ncol(mat), function(i) {
+    a <- match(i,pb)
+    if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
+    solve.model(model, csense="max", c=mat[,i]/norm(mat[,i],"2"), pars=.pkg.const$lp[[.pkg.var$solver]])[[1]]$xopt
+  }, mc.cores=nc))
+  message("100%")
   res
 }
-
-get.opt.pnt <- function(model, c) {
-  # a helper function to get an optimal point corresponding to running LP with objective function coefficients being c (normalized), for ACHR
-  c <- c / norm(c,"2")
-  res <- solve.model(model, csense="max", c=c, pars=.pkg.const$lp[[.pkg.var$solver]])[[1]]$xopt
-}
-

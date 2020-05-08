@@ -40,7 +40,7 @@ Rcpp::List mepc(const Rcpp::List& model, const double beta, const double damp, c
     arma::vec s(nRxns);
     arma::mat D = arma::eye(nRxns, nRxns);
 
-    std::cout << "Begin EP..." << std::endl;
+    Rcpp::Rcout << "Begin EP..." << std::endl;
 
     double err = 100;
     unsigned int iter = 0;
@@ -86,12 +86,12 @@ Rcpp::List mepc(const Rcpp::List& model, const double beta, const double damp, c
         }
         // print progress
         if (iter % 100 == 0) {
-            std::cout << "#iter = " << iter << "; error = " << err << "." << std::endl;
+            Rcpp::Rcout << "#iter = " << iter << "; error = " << err << "." << std::endl;
         }
     }
 
-    std::cout << iter << " iterations before converged with error = " << err << "." << std::endl;
-    std::cout << "Finished EP." << std::endl;
+    Rcpp::Rcout << iter << " iterations before converged with error = " << err << "." << std::endl;
+    Rcpp::Rcout << "Done EP." << std::endl;
 
     mu = mu * factor;
     s = s * factor * factor;
