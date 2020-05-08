@@ -113,7 +113,7 @@ form.imat <- function(model, expr, imat.pars) {
   rowub <- c(model$rowub, rep(pars$flux.bound, n))
   n <- ncol(S) - n.rxns
   c <- rep(c(0, 1/sum(rxns.int!=0,na.rm=TRUE)), c(n.rxns, n))
-  vtype <- ifelse(c==1, "I", "C")
+  vtype <- ifelse(c==0, "C", "I")
   lb <- c(model$lb, rep(0, n))
   ub <- c(model$ub, rep(1, n))
   var.ind <- rep(c("v","y+","y-","y0"), c(n.rxns, n.act, n.act.rev, n.inact)) # iMAT variable type indicators (v: fluxex; y+/-/0: indicator variables)
