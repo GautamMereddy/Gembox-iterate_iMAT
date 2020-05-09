@@ -81,7 +81,7 @@ get.opt.pnts <- function(model, mat) {
 
   pb <- round(seq(0.1,0.9,by=0.1)*ncol(mat))
   message("0%...", appendLF=FALSE)
-  res <- do.call(cbind, mclapply(1:ncol(mat), function(i) {
+  res <- do.call(cbind, parallel::mclapply(1:ncol(mat), function(i) {
     a <- match(i,pb)
     if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
     solve.model(model, csense="max", c=mat[,i]/norm(mat[,i],"2"), pars=.pkg.const$lp[[.pkg.var$solver]])[[1]]$xopt
