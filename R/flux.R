@@ -42,8 +42,8 @@ get.opt.fluxes <- function(model, rxns="all", dir="max", nc=1L, solv.pars=get.pa
   res <- unlist(parallel::mclapply(1:length(rxns), function(i) {
     a <- match(i,pb)
     if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
-    get.opt.flux(model=model, rxns=rxns[i], dir=dir, solv.pars=solv.pars, mc.cores=nc)
-  }))
+    get.opt.flux(model=model, rxns=rxns[i], dir=dir, solv.pars=solv.pars)
+  }, mc.cores=nc))
   message("100%")
   names(res) <- model$rxns[rxns]
   res
