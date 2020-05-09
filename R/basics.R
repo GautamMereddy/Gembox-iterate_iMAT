@@ -8,7 +8,7 @@ all2idx <- function(model, x) {
   # for now, only convert rxns or mets; rxnNames, metNames and genes have duplications
 
   if (is.null(x)) return(NULL)
-  if (is.na(x)) return(NA)
+  if (length(x)==1 && is.na(x)) return(NA)
   if (is.numeric(x)) return(x)
   if (is.logical(x)) return(which(x))
 
