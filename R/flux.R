@@ -49,18 +49,20 @@ get.opt.fluxes <- function(model, rxns="all", dir="max", nc=1L, solv.pars=get.pa
   res
 }
 
-fva <- function(model, rxns="all", nc=1L, max.biomass=FALSE, biomass.rgx="biomass", solv.pars=get.pars("lp", list())) {
+fva <- function(model, rxns="all", nc=1L, biomass=NULL, biomass.rgx="biomass", solv.pars=get.pars("lp", list())) {
   # flux variability analysis, for rxns given as indices of IDs as in model$rxns; "all" for all rxns
-  # max.biomass: whether to fix biomass at the maximum; biomass.rgx: regex used to find the biomass reaction
+  # biomass: whether to require minimal biomass; NULL for no constraint, or a number in [0,1] meaning requiring at least this fraction of max biomass
+  # biomass.rgx: regex used to find the biomass reaction
   # return a named matrix with two columns "min" and "max", rxns in the rows
 
   if (length(rxns)==1 && rxns=="all") {
     rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
   } else rxns <- all2idx(model, rxns)
 
-  if (max.biomass) {
+  if (!is.null(biomass)) {
+    if (!is.numeric(biomass) || biomass<0 || biomass>1) stop("Invalid biomass requirement.")
     bm.idx <- get.biomass.idx(model, biomass.rgx)
-    model <- set.rxn.bounds(model, bm.idx, lbs=1, ubs=1, relative=TRUE, nc=1L, solv.pars)
+    model <- set.rxn.bounds(model, bm.idx, lbs=biomass, relative=TRUE, nc=1L, solv.pars)
   }
   message("FVA: computing minimal fluxes, progress:")
   min <- get.opt.fluxes(model, rxns, "min", nc, solv.pars)
