@@ -57,9 +57,9 @@ df.fva <- function(model0, model1, rxns, coefs, nc, df.cutoff) {
 }
 
 df.fva.x2 <- function(model, rxns0, rxns1, coefs, nc, df.cutoff) {
-  # a helper function to perform differential flux analysis with FVA for bicellular model
+  # a helper function to perform differential flux analysis with FVA between two sets of reactions within a model (can be used for e.g. comparing between two cells in a multi-cellular model)
   # rxns0 and rxns1 are in matched order, comparing rxns1 to rxns0
-  # rxns(0/1) and coefs: either rxns(0/1) being a vector of reactions and coefs being 1 (df of each of these single reactions), or both being lists in the matched order in the case of df of combined fluxes
+  # rxns0/1 and coefs: either rxns0/1 being two vector of reactions and coefs being 1 (df of each of these single reactions), or all being lists in the matched order in the case of df of combined fluxes
 
   ub0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)
   lb0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
@@ -104,48 +104,7 @@ get.diff.flux <- function(model0, model1, rxns="all", method=c("wilcox","fva","b
     res[, c("lb0","ub0","lb1","ub1","dir.fva"):=tmp[, .(lb0, ub0, lb1, ub1, dir)]]
     setnames(res, "dir", "dir.wilcox")
   }
-  res <- cbind(data.table(id=rxns, rxn=model0$rxns[rxns]), res)
-}
-
-get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
-  # diff.flux for bicellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
-  # by default, rxns=="all": do diff.flux for all reactions that are not exlusively in the extracellular space; or specify rxns by their indices or IDs as in unicellular model
-  # method: df method to use
-  # nsamples: a single number, meaning to use the last N samples
-  # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
-
-  method <- match.arg(method)
-
-  r0 <- sort(grep(c0, model$rxns))
-  r1 <- sort(grep(c1, model$rxns)) # sort just to be safe that r0 and r1 are in matched order
-  if (length(rxns)==1 && rxns=="all") {
-    rxns <- stringr::str_sub(model$rxns[r0],1,-7)
-  } else {
-    if (is.character(rxns)) rxns <- all2idx(model, paste0(rxns,"_cell1"))
-    tmp <- rxns %in% r0
-    if (!all(tmp)) stop("Not all given rxns matched to non-extracellular reactions, please check!")
-    tmp <- r0 %in% rxns
-    r0 <- r0[tmp]
-    r1 <- r1[tmp]
-    rxns <- stringr::str_sub(model$rxns[r0],1,-7)
-  }
-
-  if (method %in% c("wilcox","both")) {
-    if (!"sample" %in% names(model)) stop("No sampling result found in models, cannot use method 'wilcox' or 'both'.")
-    ns <- ncol(model$sample$pnts)
-    if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-    mat0 <- model$sample$pnts[r0, (ns-nsamples+1):ns]
-    mat1 <- model$sample$pnts[r1, (ns-nsamples+1):ns]
-    res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
-  } else {
-    res <- df.fva.x2(model, r0, r1, 1, nc, df.cutoff)
-  }
-  if (method=="both") {
-    tmp <- df.fva.x2(model, r0, r1, 1, nc, df.cutoff)
-    res[, c("lb0","ub0","lb1","ub1","dir.fva"):=tmp[, .(lb0, ub0, lb1, ub1, dir)]]
-    setnames(res, "dir", "dir.wilcox")
-  }
-  res <- cbind(data.table(id=r0, rxn=rxns), res)
+  res <- data.table(id=rxns, rxn=model0$rxns[rxns], res)
 }
 
 get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
@@ -158,7 +117,7 @@ get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","f
   # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
 
   if (!is.list(rxns) || !is.list(coefs)) stop("rxns and coefs should both be lists.")
-  suppressMessages( rxns <- lapply(rxns, all2idx, model=model0) )
+  rxns <- lapply(rxns, all2idx, model=model0)
   method <- match.arg(method)
   if (method %in% c("wilcox","both")) {
     if (!"sample" %in% names(model0) || !"sample" %in% names(model1)) stop("No sampling result found in models, cannot use method 'wilcox' or 'both'.")
@@ -178,7 +137,7 @@ get.diff.comb.flux <- function(model0, model1, rxns, coefs, method=c("wilcox","f
     setnames(res, "dir", "dir.wilcox")
   }
   if (is.null(names(rxns))) tmp <- 1:length(rxns) else tmp <- names(rxns)
-  res <- cbind(data.table(id=tmp, res))
+  res <- data.table(id=tmp, res)
 }
 
 get.diff.transport.flux <- function(model0, model1, c1="c", c2="e", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
@@ -211,35 +170,7 @@ get.diff.flux.by.met <- function(model0, model1, mets="all", nsamples=4000, nc=1
   if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
   mat1 <- abs(model1$S[mets,,drop=FALSE]) %*% abs(model1$sample$pnts[, (ns-nsamples+1):ns]) / 2
   res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
-  res <- cbind(data.table(id=mets, met=model0$mets[mets], res))
-}
-
-get.diff.flux.by.met.x2 <- function(model, c0="cell1", c1="cell2", mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
-  # diff.flux.by.met for bicellular model, between the two cells, i.e. c1 (_cell2) vs c0 (_cell1)
-  # will just re-use get.diff.flux.by.met; but perform analysis always for all intracellular metabolites
-  # in the result, metabolite id correspond to those in the single cellular model
-
-  m0 <- sort(grep(c0, model$mets))
-  m1 <- sort(grep(c1, model$mets))
-  if (length(mets)==1 && mets=="all") {
-    mets <- stringr::str_sub(model$mets[m0],1,-7)
-  } else {
-    if (is.character(mets)) mets <- all2idx(model, paste0(mets,"_cell1"))
-    tmp <- mets %in% m0
-    if (!all(tmp)) stop("Not all given mets matched to intracellular metabolites, please check!")
-    tmp <- m0 %in% mets
-    m0 <- m0[tmp]
-    m1 <- m1[tmp]
-    mets <- stringr::str_sub(model$mets[m0],1,-7)
-  }
-
-  if (!"sample" %in% names(model)) stop("No sampling result found in models, cannot proceed.")
-  ns <- ncol(model$sample$pnts)
-  if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-  mat0 <- abs(model$S[m0,,drop=FALSE]) %*% abs(model$sample$pnts[m0, (ns-nsamples+1):ns]) / 2
-  mat1 <- abs(model$S[m1,,drop=FALSE]) %*% abs(model$sample$pnts[m1, (ns-nsamples+1):ns]) / 2
-  res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
-  res <- cbind(data.table(id=m0, met=mets, res))
+  res <- data.table(id=mets, met=model0$mets[mets], res)
 }
 
 check.diff.flux.of.met <- function(model, dflux.res, mets) {
@@ -278,3 +209,134 @@ pathway.gsea <- function(dflux.res, pathways, value.name="lfc.abs", id.name="rxn
   res <- res[order(padj, pval)]
 }
 
+match.id.x2 <- function(model, c0="cell1", c1="cell2", ids="all", by=c("rxns","mets")) {
+  # a helper function to find common rxns or mets between two cells (c1 and c2) in a multi-cellular model
+
+  by <- match.arg(by)
+
+  r0 <- stringr::str_match(model[[by]], paste0("(.*)_",c0,"$"))
+  r1 <- stringr::str_match(model[[by]], paste0("(.*)_",c1,"$"))
+  rs <- intersect(r0[,2], r1[,2])
+  rs <- rs[!is.na(rs)]
+  r0 <- r0[match(rs, r0[,2]), ]
+  r1 <- r1[match(rs, r1[,2]), ]
+
+  tmpf <- function(x) {
+    if (length(x)==1 && x=="all") {
+      x <- r0[,2]
+    } else {
+      if (!is.character(x)) stop(by," should be given as ",by," IDs (type character).")
+      if (!all(x %in% r0[,2])) stop("Not all given ",by," matched to non-extracellular ",by,", please check!")
+      idx <- match(x, r0[,2])
+      r0 <- r0[idx,]
+      r1 <- r1[idx,]
+    }
+    r0 <- match(r0[,1], model[[by]])
+    r1 <- match(r1[,1], model[[by]])
+    list(ids=x, idx0=r0, idx1=r1)
+  }
+
+  if (is.list(ids)) res <- lapply(ids, tmpf) else res <- tmpf(ids)
+  res
+}
+
+get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+  # diff.flux for multi-cellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
+  # by default, rxns=="all": do diff.flux for all reactions that are not exlusively in the extracellular space; or specify rxns by their IDs as in model$rxns but w/o the cell number suffix
+  # method: df method to use
+  # nsamples: a single number, meaning to use the last N samples
+  # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
+
+  method <- match.arg(method)
+
+  tmp <- match.id.x2(model, c0, c1, rxns, by="rxns")
+  rxns <- tmp$ids
+  r0 <- tmp$idx0
+  r1 <- tmp$idx1
+
+  if (method %in% c("wilcox","both")) {
+    if (!"sample" %in% names(model)) stop("No sampling result found in models, cannot use method 'wilcox' or 'both'.")
+    ns <- ncol(model$sample$pnts)
+    if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
+    mat0 <- model$sample$pnts[r0, (ns-nsamples+1):ns]
+    mat1 <- model$sample$pnts[r1, (ns-nsamples+1):ns]
+    res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
+  } else {
+    res <- df.fva.x2(model, r0, r1, 1, nc, df.cutoff)
+  }
+  if (method=="both") {
+    tmp <- df.fva.x2(model, r0, r1, 1, nc, df.cutoff)
+    res[, c("lb0","ub0","lb1","ub1","dir.fva"):=tmp[, .(lb0, ub0, lb1, ub1, dir)]]
+    setnames(res, "dir", "dir.wilcox")
+  }
+  res <- data.table(rxn=rxns, res)
+}
+
+get.diff.comb.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+  # do differential flux analysis for the linear combination of fluxes of rxns, for a multi-cellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
+  # rxns is a list, each element is a vector of reaction indices or IDs (as in model$rxns)
+  # coefs is a list in the matched order with rxns, each element contains the coefficient for the linear combination
+  # this function will do df for each case corresponding to each element of the rxns and coefs lists
+  # method: df method to use
+  # nsamples: a single number, meaning to use the last N samples
+  # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
+
+  if (!is.list(rxns) || !is.list(coefs)) stop("rxns and coefs should both be lists.")
+  method <- match.arg(method)
+
+  tmp <- match.id.x2(model, c0, c1, rxns, by="rxns")
+  rxns <- lapply(tmp, function(x) x$ids)
+  r0s <- lapply(tmp, function(x) x$idx0)
+  r1s <- lapply(tmp, function(x) x$idx1)
+  
+  if (method %in% c("wilcox","both")) {
+    if (!"sample" %in% names(model)) stop("No sampling result found in model, cannot use method 'wilcox' or 'both'.")
+    ns <- ncol(model$sample$pnts)
+    if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
+    mat0 <- mapply(function(x,c) colSums(model$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), r0s, coefs)
+    mat1 <- mapply(function(x,c) colSums(model$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), r1s, coefs)
+    res <- df.wilcox(mat0, mat1, 2, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
+  } else {
+    res <- df.fva.x2(model, r0s, r1s, coefs, nc, df.cutoff)
+  }
+  if (method=="both") {
+    tmp <- df.fva.x2(model, r0s, r1s, coefs, nc, df.cutoff)
+    res[, c("lb0","ub0","lb1","ub1","dir.fva"):=tmp[, .(lb0, ub0, lb1, ub1, dir)]]
+    setnames(res, "dir", "dir.wilcox")
+  }
+  if (is.null(names(rxns))) tmp <- 1:length(rxns) else tmp <- names(rxns)
+  res <- data.table(id=tmp, res)
+}
+
+get.diff.transport.flux.x2 <- function(model, cell0="cell1", cell1="cell2", c1="c", c2="e", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+  # get.diff.transport.flux for multi-cellular model, between the two cells, i.e. cell1 (_cell2) vs cell0 (_cell1)
+  # c1 and c2: the two compartments for the transport
+  # this function will do df of the net (summed) fluxes for each metabolite being transported from compartment 2 to compartment 1
+  # method: df method to use
+  # nsamples: a single number, meaning to use the last N samples
+  # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
+
+  tx <- get.transport.info(model, c1=c1, c2=c2, cell=cell0)
+  rxns <- lapply(tx, function(x) stringr::str_match(x$rxn, paste0("(.*)_",cell0,"$"))[,2])
+  coefs <- lapply(tx, function(x) x$coef)
+  get.diff.comb.flux.x2(model, cell0, cell1, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
+}
+
+get.diff.flux.by.met.x2 <- function(model, c0="cell1", c1="cell2", mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+  # diff.flux.by.met for multi-cellular model, between the two cells, i.e. c1 (_cell2) vs c0 (_cell1)
+  # will just re-use get.diff.flux.by.met; but perform analysis always for all intracellular metabolites
+  # in the result, metabolite id correspond to those in the single cellular model
+
+  tmp <- match.id.x2(model, c0, c1, mets, by="mets")
+  mets <- tmp$ids
+  m0 <- tmp$idx0
+  m1 <- tmp$idx1
+
+  if (!"sample" %in% names(model)) stop("No sampling result found in models, cannot proceed.")
+  ns <- ncol(model$sample$pnts)
+  if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
+  mat0 <- abs(model$S[m0,,drop=FALSE]) %*% abs(model$sample$pnts[, (ns-nsamples+1):ns]) / 2
+  mat1 <- abs(model$S[m1,,drop=FALSE]) %*% abs(model$sample$pnts[, (ns-nsamples+1):ns]) / 2
+  res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
+  res <- data.table(id=m0, met=mets, res)
+}
