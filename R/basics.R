@@ -45,33 +45,44 @@ get.transport.info <- function(model, mets="all", c1="c", c2="e", cell=NULL) {
   # cell: NULL for unicellular model; for multicellular model, can be used to specify which cell e.g. cell="cell1", then non-extracellular compartment will be only for that cell
   # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment suffix; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met in c1 in the rxn); equ (reaction equation); gene (transporter genes mapped to rxn)
 
-  mets.in <- mets
-  if (!is.null(cell) && c1!="e") mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")_",cell,"$") else mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,"$)")
-  if (!is.null(cell) && c2!="e") mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")_",cell,"$") else mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,"$)")
-  mets1 <- stringr::str_match(model$mets, mets1.rgx)
-  mets2 <- stringr::str_match(model$mets, mets2.rgx)
-  mets <- intersect(mets1[,2], mets2[,2])
-  if (length(mets.in)==1 && mets.in!="all" || length(mets.in)>1) mets <- intersect(mets, mets.in)
-  mets <- mets[!is.na(mets)]
-  if (length(mets)==0) {
-    warning("No transportation reaction is found, NULL returned.")
-    return(NULL)
+  tmpf <- function(mets, c1, c2, cell) {
+    mets.in <- mets
+    if (!is.null(cell) && c1!="e") mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")_",cell,"$") else mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,"$)")
+    if (!is.null(cell) && c2!="e") mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")_",cell,"$") else mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,"$)")
+    mets1 <- stringr::str_match(model$mets, mets1.rgx)
+    mets2 <- stringr::str_match(model$mets, mets2.rgx)
+    mets <- intersect(mets1[,2], mets2[,2])
+    if (length(mets.in)==1 && mets.in!="all" || length(mets.in)>1) mets <- intersect(mets, mets.in)
+    mets <- mets[!is.na(mets)]
+    if (length(mets)==0) return(NULL)
+    mets1 <- all2idx(model, mets1[match(mets, mets1[,2]), 1])
+    mets2 <- all2idx(model, mets2[match(mets, mets2[,2]), 1])
+    tmpf1 <- function(m1, m2) {
+      rxns <- intersect(mets2rxns(model, m1)[[1]], mets2rxns(model, m2)[[1]])
+      if (length(rxns)==0) return(NULL)
+      coefs <- model$S[m1, rxns]
+      data.table(id=rxns, rxn=model$rxns[rxns], coef=coefs, equ=get.rxn.equations(model, rxns), gene=rxns2genes(model, rxns))
+    }
+    res <- mapply(tmpf1, mets1, mets2, SIMPLIFY=FALSE)
+    names(res) <- mets
+    res <- res[!sapply(res, is.null)]
+    if (length(res)==0) res <- NULL
+    res
   }
-  mets1 <- all2idx(model, mets1[match(mets, mets1[,2]), 1])
-  mets2 <- all2idx(model, mets2[match(mets, mets2[,2]), 1])
-  tmpf <- function(m1, m2) {
-    rxns <- intersect(mets2rxns(model, m1)[[1]], mets2rxns(model, m2)[[1]])
-    if (length(rxns)==0) return(NULL)
-    coefs <- model$S[m1, rxns]
-    data.table(id=rxns, rxn=model$rxns[rxns], coef=coefs, equ=get.rxn.equations(model, rxns), gene=rxns2genes(model, rxns))
-  }
-  res <- mapply(tmpf, mets1, mets2, SIMPLIFY=FALSE)
-  names(res) <- mets
-  res <- res[!sapply(res, is.null)]
-  if (length(res)==0) {
-    warning("No transportation reaction is found, NULL returned.")
-    return(NULL)
-  }
+
+  if (is.null(cell)) {
+    cells <- unique(c(stringr::str_match(model$mets, "cell.$")))
+    cells <- cells[!is.na(cells)]
+    if (length(cells)!=0) {
+      tmp <- lapply(1:length(cells), function(i) {
+        res <- tmpf(mets, c1, c2, cells[i])
+        if (!is.null(res)) names(res) <- paste0(names(res),"_",cells[i])
+        res
+      })
+      res <- do.call(c, tmp)
+    } else res <- tmpf(mets, c1, c2, NULL)
+  } else res <- tmpf(mets, c1, c2, cell)
+  if (is.null(res)) warning("No transportation reaction is found, NULL returned.")
   res
 }
 
