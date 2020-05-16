@@ -218,8 +218,8 @@ match.id.x2 <- function(model, c0="cell1", c1="cell2", ids="all", by=c("rxns","m
   r1 <- stringr::str_match(model[[by]], paste0("(.*)_",c1,"$"))
   rs <- intersect(r0[,2], r1[,2])
   rs <- rs[!is.na(rs)]
-  r0 <- r0[match(rs, r0[,2]), ]
-  r1 <- r1[match(rs, r1[,2]), ]
+  r0 <- r0[match(rs, r0[,2]),,drop=FALSE]
+  r1 <- r1[match(rs, r1[,2]),,drop=FALSE]
 
   tmpf <- function(x) {
     if (length(x)==1 && x=="all") {
@@ -228,8 +228,8 @@ match.id.x2 <- function(model, c0="cell1", c1="cell2", ids="all", by=c("rxns","m
       if (!is.character(x)) stop(by," should be given as ",by," IDs (type character).")
       if (!all(x %in% r0[,2])) stop("Not all given ",by," matched to non-extracellular ",by,", please check!")
       idx <- match(x, r0[,2])
-      r0 <- r0[idx,]
-      r1 <- r1[idx,]
+      r0 <- r0[idx,,drop=FALSE]
+      r1 <- r1[idx,,drop=FALSE]
     }
     r0 <- match(r0[,1], model[[by]])
     r1 <- match(r1[,1], model[[by]])
