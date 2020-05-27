@@ -45,6 +45,9 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
   } else if (.pkg.var$solver=="gurobi") {
 
     m <- list(obj=c, A=A, rhs=b, Q=Q, lb=lb, ub=ub, modelsense=csense, sense=ifelse(sense=="G",">","<"), vtype=vtype)
+    if (!is.null(x0)) {
+      if (any(vtype!="C")) m$start <- x0 else m$pstart <- x0
+    }
     res <- gurobi::gurobi(m, pars)
 
     if (!res$status %in% c("OPTIMAL","SOLUTION_LIMIT","USER_OBJ_LIMIT")) warning("In solve.model(): Potential issue, solver status: ", res$status, ".", call.=FALSE)
