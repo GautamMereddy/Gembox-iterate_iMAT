@@ -13,4 +13,4 @@ This is an R package that implements basic functionality of GEM, as well as seve
   - LinkingTo: Rcpp, RcppArmadillo  
   - Suggests: R.matlab, sybilSBML, rlist, fgsea, hypergraph, hyperdraw, RColorBrewer, visNetwork
 
-This package for now only works on Linux systems.
+This package for now only works on Linux and MacOS.
