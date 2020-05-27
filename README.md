@@ -6,11 +6,12 @@ This is an R package that implements basic functionality of GEM, as well as seve
 
 ### Dependencies
 
-* ILOG CPLEX Optimization Studio (free academic version available from IBM official website)
+* ILOG CPLEX Optimization Studio or Gurobi (free academic licenses available)
 * R packages
   - Depends: Matrix, data.table  
-  - Imports: Rcplex2 (ruppinlab/Rcplex2), stringr, parallel, igraph  
+  - Imports: stringr, parallel  
   - LinkingTo: Rcpp, RcppArmadillo  
-  - Suggests: R.matlab, sybilSBML, rlist, fgsea, hypergraph, hyperdraw, RColorBrewer, visNetwork
+  - Suggests: Rcplex2 (ruppinlab/Rcplex2), gurobi, R.matlab, sybilSBML, rlist, fgsea, igraph, hypergraph, hyperdraw, RColorBrewer, visNetwork
+  - At least one of Rcplex2 (ruppinlab/Rcplex2) and gurobi is required for running optimizations
 
 This package for now only works on Linux and MacOS.
