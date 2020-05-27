@@ -22,29 +22,37 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
   vtype <- model$vtype
 
   if (.pkg.var$solver=="rcplex") {
+
     if ("nsol" %in% names(pars)) {
       nsol <- pars$nsol
       pars$nsol <- NULL
     } else nsol <- 1
     res <- Rcplex2::Rcplex(c, A, b, Q, lb, ub, x0, pars, csense, sense, vtype, nsol)
+    if (!is.null(names(res))) res <- list(res)
+    if (!res[[1]]$status %in% c(1,101,102,128,129,130)) warning("Potential issue, solver status: ", res[[1]]$status, ".")
+
     tmpf <- function(x) {
-      res <- x[c("xopt", "obj")]
-      res$stat <- x$status
-      res$stat.str <- .pkg.const$cpx.stat.code[as.character(x$status)]
-      if (res$stat %in% c(2,118,12)) {
+      res <- list(stat=.pkg.const$cpx.stat.code[as.character(x$status)], obj=x$obj, xopt=x$xopt)
+      if (x$status %in% c(2,118,12)) {
         # unbounded (2,118) or possibly unbounded (12, maybe others but I'm not sure) problem
         if (objsense=="min") res$obj <- -Inf
         if (objsense=="max") res$obj <- Inf
-      } else if (!res$stat %in% c(1,101,102,128,129,130)) {
-        warning("In solve.model(): Potential issue, solver status: ", res$stat.str, ", returning NA for xopt and objective value.", call.=FALSE)
-        res$obj <- NA
-        res$xopt <- NA
       }
       res
     }
-    if (!is.null(names(res))) res <- list(res)
     res <- lapply(res, tmpf)
+
+  } else if (.pkg.var$solver=="gurobi") {
+
+    m <- list(obj=c, A=A, rhs=b, Q=Q, lb=lb, ub=ub, modelsense=csense, sense=ifelse(sense=="G",">","<"), vtype=vtype)
+    res <- gurobi::gurobi(m, pars)
+
+    if (!res$status %in% c("OPTIMAL","SOLUTION_LIMIT","USER_OBJ_LIMIT")) warning("In solve.model(): Potential issue, solver status: ", res$status, ".", call.=FALSE)
+    if ("pool" %in% names(res)) {
+      res <- lapply(res$pool, function(x) list(stat=res$status, obj=x$objval, xopt=x$x))
+    } else res <- list(stat=res$status, obj=res$objval, xopt=res$x)
+
   }
-  # todo: add cplexAPI and gurobi
+
   res
 }

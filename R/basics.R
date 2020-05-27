@@ -514,6 +514,10 @@ s2igraph <- function(model, exclude.mets=NULL, exclude.mets.rgx="default", exclu
   # exclude.mets.rgx: regex of some high degree metabolites to be excluded by default; if "default", will use the default as in get.exclude.mets()
   # exclude.mets.degree: exclude metabolites with degree greater than this
 
+  if (!requireNamespace("igraph", quietly=TRUE)) {
+    stop("Package igraph needed for this function to work.")
+  }
+
   s <- as.matrix(model$S) # convert to "dense" matrix, since the igraph::graph_from_incidence_matrix function contains bugs working with sparse matrix
   # exclude metabolites
   exclude.mets <- get.exclude.mets(model, exclude.mets, exclude.mets.rgx, exclude.mets.degree)

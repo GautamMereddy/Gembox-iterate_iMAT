@@ -14,18 +14,19 @@ Depends:
     data.table
 Imports:
     Rcpp,
-    Rcplex2,
     stringr,
-    parallel,
-    igraph
+    parallel
 LinkingTo:
     Rcpp,
     RcppArmadillo
 Suggests:
+    Rcplex2,
+    gurobi,
     R.matlab,
     sybilSBML,
     rlist,
     fgsea,
+    igraph,
     hypergraph,
     hyperdraw,
     RColorBrewer,

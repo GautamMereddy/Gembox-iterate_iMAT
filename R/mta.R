@@ -106,9 +106,9 @@ get.mta.score <- function(model, miqp.out, detail) {
   miqp.out <- miqp.out[[1]]
   if (length(miqp.out$xopt)==1 && is.na(miqp.out$xopt)) {
     if (detail) {
-      return(data.table(solv.stat=miqp.out$stat.str, v.opt=NA, rxns.change.yes=NA, rxns.change.no=NA, rxns.change.overdo=NA, advs.change.yes=NA, advs.change.no=NA, advs.change.overdo=NA, advs.steady=NA, score.change=NA, score.steady=NA, score.mta=NA))
+      return(data.table(solv.stat=miqp.out$stat, v.opt=NA, rxns.change.yes=NA, rxns.change.no=NA, rxns.change.overdo=NA, advs.change.yes=NA, advs.change.no=NA, advs.change.overdo=NA, advs.steady=NA, score.change=NA, score.steady=NA, score.mta=NA))
     } else {
-      return(data.table(solv.stat=miqp.out$stat.str, score.change=NA, score.steady=NA, score.mta=NA))
+      return(data.table(solv.stat=miqp.out$stat, score.change=NA, score.steady=NA, score.mta=NA))
     }
   }
 
@@ -146,9 +146,9 @@ get.mta.score <- function(model, miqp.out, detail) {
   s <- s.ch/s.st
   # return
   if (detail) {
-    res <- data.table(solv.stat=miqp.out$stat.str, v.opt=list(v), rxns.change.yes=list(yes), rxns.change.no=list(no), rxns.change.overdo=list(overdo), advs.change.yes=list(adv.yes), advs.change.no=list(adv.no), advs.change.overdo=list(adv.overdo), advs.steady=list(adv.st), score.change=s.ch, score.steady=s.st, score.mta=s)
+    res <- data.table(solv.stat=miqp.out$stat, v.opt=list(v), rxns.change.yes=list(yes), rxns.change.no=list(no), rxns.change.overdo=list(overdo), advs.change.yes=list(adv.yes), advs.change.no=list(adv.no), advs.change.overdo=list(adv.overdo), advs.steady=list(adv.st), score.change=s.ch, score.steady=s.st, score.mta=s)
   } else {
-    res <- data.table(solv.stat=miqp.out$stat.str, score.change=s.ch, score.steady=s.st, score.mta=s)
+    res <- data.table(solv.stat=miqp.out$stat, score.change=s.ch, score.steady=s.st, score.mta=s)
   }
   res
 }

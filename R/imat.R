@@ -160,13 +160,13 @@ get.xopt <- function(imat.model, milp.out, pars) {
 
   if (pars$sol==0) {
     xopt <- do.call(cbind, lapply(milp.out, function(x) {
-      if (x$stat %in% c(101,102,128,129,130)) x$xopt else NULL
+      if (x$stat %in% .pkg.const$ok.stat) x$xopt else NULL
     }))
     if (is.null(xopt)) stop("Potential issues in all MILP solutions.")
     xopt <- rowMeans(xopt)
     xopt[imat.model$vtype=="I"] <- as.numeric(xopt[imat.model$vtype=="I"]>=pars$sol.major.cutoff)
   } else {
-    if (!milp.out[[pars$sol]]$stat %in% c(101,102,128,129,130)) stop("Potential issues in the selected MILP solution.")
+    if (!milp.out[[pars$sol]]$stat %in% .pkg.const$ok.stat) stop("Potential issues in the selected MILP solution.")
     xopt <- milp.out[[pars$sol]]$xopt
   }
   xopt

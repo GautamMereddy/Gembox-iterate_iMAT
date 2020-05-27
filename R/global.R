@@ -5,8 +5,8 @@
 
 # an environment object used to store the global variables, such that the variables can be changed by user if needed
 .pkg.var <- new.env(parent=emptyenv())
-# current solver; todo: set default solver based on solver availability
-.pkg.var$solver  <- "rcplex"
+# current solver
+.pkg.var$solver <- ""
 
 
 ### --- global constants --- ###
@@ -17,10 +17,13 @@
 # solver parameters (dependent on the solver used)
 .pkg.const$lp <- list()
 .pkg.const$lp$rcplex <- list(trace=0, maxcalls=2e4, tilim=120, threads=1, parallel.mode=1, nsol=1)
+.pkg.const$lp$gurobi <- list(OutputFlag=0, TimeLimit=120, Threads=1)
 .pkg.const$qp <- list()
 .pkg.const$qp$rcplex <- list(trace=0, maxcalls=2e4, tilim=300, threads=1, parallel.mode=1, nsol=1)
+.pkg.const$qp$gurobi <- list(OutputFlag=0, TimeLimit=300, Threads=1)
 .pkg.const$mip <- list()
 .pkg.const$mip$rcplex <- list(trace=1, maxcalls=2e4, tilim=3600, threads=1, parallel.mode=1, nodesel=0, epagap=1e-6, epgap=1e-4, nsol=1, solnpoolagap=0, solnpoolgap=0, solnpoolintensity=2)
+.pkg.const$mip$gurobi <- list(OutputFlag=1, TimeLimit=3600, Threads=1, MIPGapAbs=1e-6, MIPGap=1e-4, PoolSearchMode=0, PoolSolutions=1, PoolGap=0)
 # sampling parameters
 .pkg.const$samp <- list(method="achr", n.sample=5e3, steps.per.pnt=400, n.warmup=5000, nc=1L)
 # parameters for various algorithms
@@ -29,7 +32,7 @@
 .pkg.const$mep <- list(beta=1e9, damp=0.9, max.iter=2000, dlb=1e-50, dub=1e50, epsil=1e-6)
 
 # cplex solver status codes
-.pkg.const$cpx.stat.code = c(
+.pkg.const$cpx.stat.code <- c(
   `1`="CPX_STAT_OPTIMAL",
   `2`="CPX_STAT_UNBOUNDED",
   `3`="CPX_STAT_INFEASIBLE",
@@ -96,12 +99,15 @@
   `132`="CPXMIP_DETTIME_LIM_INFEAS"
 )
 
+# optimal or "ok" solver status
+.pkg.const$ok.stat <- c(.pkg.const$cpx.stat.code[as.character(c(101,102,128,129,130))], c("OPTIMAL","SOLUTION_LIMIT","USER_OBJ_LIMIT"))
+
 
 ### --- showing/setting global variables --- ###
 
 # only solver is meant to be changeable; all other global variables are meant to be constants
 
-solver <- function(x=c("","rcplex")) {
+solver <- function(x=c("","rcplex","gurobi")) {
   # show the current solver if no argument is passed, or set solver
   # for now, only Rcplex is available
   # todo: add cplexAPI and gurobi; check solver availability
