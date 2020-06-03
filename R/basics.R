@@ -279,7 +279,7 @@ subsystems2gsets <- function(model, by=c("rxn","met"), exclude.mets=NULL, exclud
 ### --- model manipulation, e.g. subsetting models, adding/removing reactions, etc. --- ###
 
 subset.model <- function(model, i, j, rm.extra=FALSE, update.genes=FALSE, row.vars=NULL, col.vars=NULL) {
-  # subset model like a matrix, i for metabolites, j for reactions; i and j can be logical or indices or IDs as in model$mets and model$rxns, but negative indices cannot be used
+  # subset model like a matrix, i for metabolites, j for reactions; i and j can be logical or indices or IDs as in model$mets and model$rxns, negative indices can also be used; i or j can be NULL (not subsetting)
   # rm.extra: after subsetting, whether to further remove "empty" reactions and metabolites involved in no reaction
   # update.genes: whether to remove genes no longer in the model, this will be done by setting those genes to NA to avoid the need to completely rewrite model$rules; but note that this will affect genes2fluxes()
   # the fields in the fields variable below are assumed to be present in the model, and only these fields of the model are kept and updated, unless:
@@ -290,13 +290,18 @@ subset.model <- function(model, i, j, rm.extra=FALSE, update.genes=FALSE, row.va
 
   i <- all2idx(model, i)
   j <- all2idx(model, j)
+  if (all(i<0)) i <- setdiff(1:nrow(model$S), -i)
+  if (all(j<0)) j <- setdiff(1:ncol(model$S), -j)
+  if (is.null(i)) i <- 1:nrow(model$S)
+  if (is.null(j)) j <- 1:ncol(model$S)
+
   if (rm.extra) {
     tmp <- model$S
-    tmp[-i,] <- 0
-    tmp[,-j] <- 0 # note tmp[-i,-j] <- 0 will not give what is wanted
+    if (length(i)!=nrow(tmp)) tmp[-i,] <- 0
+    if (length(j)!=ncol(tmp)) tmp[,-j] <- 0 # note tmp[-i,-j] <- 0 will not give what is wanted
     tmp <- tmp!=0
-    i <- rowSums(tmp)>0
-    j <- colSums(tmp)>0
+    i <- Matrix::rowSums(tmp)>0
+    j <- Matrix::colSums(tmp)>0
   }
   names(fields) <- fields
   res <- lapply(fields, function(field) {
@@ -348,18 +353,6 @@ add.constraint <- function(model, rxns, coefs, rowlb, rowub) {
   model$rowlb <- c(model$rowlb, rowlb)
   model$rowub <- c(model$rowub, rowub)
   model
-}
-
-rm.rxns <- function(model, x, rm.extra=FALSE, update.genes=FALSE, row.vars=NULL, col.vars=NULL) {
-  # remove reactions from model, given as logical or indices or IDs as in model$rxns
-  # rm.extra: after subsetting, whether to further remove "empty" reactions and metabolites involved in no reaction
-  # update.genes: whether to remove genes no longer in the model, this will be done by setting those genes to NA to avoid the need to completely rewrite model$rules; but note that this will affect genes2fluxes()
-  # the default fields as in subset.model() are assumed to be present in the model, and only these fields of the model are kept and updated, unless:
-  # names of extra row (metabolite-related) or column (reaction-related) to update and keep in the returned model are given in row.vars and col.vars
-
-  x <- all2idx(model, x)
-  j <- setdiff(1:ncol(model$S), x)
-  subset.model(model, 1:nrow(model$S), j, rm.extra, update.genes, row.vars, col.vars)
 }
 
 add.rxn <- function(model, rxn, mets, coefs, lb, ub, rule="0", rxnName=rxn, subSystem=NA, metNames=mets, metFormulas=NA) {
@@ -460,7 +453,7 @@ rm.blocked.rxns <- function(model, nc=1L, rm.extra=FALSE, update.genes=FALSE, so
 
   fva.res <- fva(model, nc=nc, solv.pars=solv.pars)
   x <- fva.res$vmin==0 & fva.res$vmax==0
-  rm.rxns(model, x, rm.extra, update.genes)
+  subset.model(model, !x, rm.extra, update.genes)
 }
 
 convert.rev.rxns <- function(model) {
@@ -482,6 +475,58 @@ convert.rev.rxns <- function(model) {
   model$rules <- c(model$rules, model$rules[rev.idx])
   model$subSystems <- c(model$subSystems, model$subSystems[rev.idx])
   model
+}
+
+reduce.model <- function(model, v=NULL) {
+  # "reduce" a metabolic model by recursively finding metabolites involved in only two reactions, then replacing the two reactions by a single summed reaction that "cancels out" the shared metabolite (and also removing the metabolite)
+  # the new reaction will have rxns and rxnsNames being those of the original two reactions concatenated separated by "_AND_"
+  # if the original two reactions have different subSystems, the new reaction's subSystem will be the original two concatenated separated by ", "
+  # the new reaction will have a gene mapping rule being the & of those of the original two reactions if both of the original reactions have non-empty (i.e. not "0") rules
+  # c, lb, and ub are correspondingly adjusted
+  # v: optional, a vector of flux values in the order of model$rxns to be reduced along with the model; can also be a matrix where the rows are rxns in the order of model$rxns
+
+  met <- match(2, Matrix::rowSums(model$S!=0))
+  while (!is.na(met)) {
+    rxns <- which(model$S[met,]!=0)
+    coefs <- model$S[met,][rxns]
+    r <- coefs[1]/coefs[2]
+    model$S[, rxns[1]] <- model$S[,rxns[1]] - r * model$S[,rxns[2]]
+    model$S[, rxns[2]] <- 0
+    if (prod(coefs)<0) {
+      model$lb[rxns[1]] <- max(model$lb[rxns[1]], abs(r) * model$lb[rxns[2]])
+      model$ub[rxns[1]] <- min(model$ub[rxns[1]], abs(r) * model$ub[rxns[2]])
+    } else {
+      model$lb[rxns[1]] <- max(model$lb[rxns[1]], -abs(r * model$ub[rxns[2]]))
+      model$ub[rxns[1]] <- min(model$ub[rxns[1]], abs(r * model$lb[rxns[2]]))
+    }
+    if ("c" %in% names(model)) model$c[rxns[1]] <- model$c[rxns[1]] - r * model$c[rxns[2]]
+    model$rxns[rxns[1]] <- paste(model$rxns[rxns], collapse="_AND_")
+    model$rxnNames[rxns[1]] <- paste(model$rxnNames[rxns], collapse="_AND_")
+    tmp <- model$rules[rxns]
+    tmp <- tmp[tmp!="0"]
+    if (length(tmp)==0) {
+      model$rules[rxns[1]] <- "0"
+    } else if (length(tmp)==1) {
+      model$rules[rxns[1]] <- tmp
+    } else model$rules[rxns[1]] <- paste0("(", paste(tmp, collapse=") & (") ,")")
+    if ("subSystems" %in% names(model)) model$subSystems[rxns[1]] <- paste(unique(model$subSystems[rxns]), collapse=", ")
+    
+    model$S[, rxns[2]] <- 0
+    if (is.vector(v)) v[rxns[2]] <- NA else if (is.matrix(v)) v[rxns[2],] <- NA
+    met <- match(2, Matrix::rowSums(model$S!=0))
+  }
+  
+  tmp <- model$S!=0
+  i <- Matrix::rowSums(tmp)>0
+  j <- Matrix::colSums(tmp)>0
+  res <- subset.model(model, i, j)
+
+  if (is.vector(v)) {
+    res <- list(model=res, v=v[!is.na(v) & j])
+  } else if (is.matrix(v)) {
+    res <- list(model=res, v=v[!is.na(v[,1]) & j, ])
+  }
+  res
 }
 
 
