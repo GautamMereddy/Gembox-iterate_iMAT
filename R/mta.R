@@ -30,11 +30,12 @@ de.dt2dflux <- function(model, de.res, topn=100, padj.cutoff=0.05, na2zero=TRUE)
 
 ### --- MTA --- ###
 
-mta <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, mta.pars=list(), solv.pars=list()) {
+mta <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, mta.pars=list(), solv.pars=list()) {
   # the main function for running MTA (the original MIQP version)
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
   # rxns are the indices or IDs or rxns to run MTA on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
+  # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
   # detail: whether to return more details or only the MTA scores
   # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(mta.model, result)
@@ -43,6 +44,11 @@ mta <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, mta.pa
   mta.model <- form.mta(model, flux0, dflux, mta.pars)
 
   # solve the MTA models across the rxns
+  if (!is.null(ko)) {
+    ko <- all2idx(mta.model, ko)
+    mta.model$lb[ko] <- 0
+    mta.model$ub[ko] <- 0
+  }
   res <- run.ko.screen(mta.model, rxns, run.mta, solv.pars=solv.pars, detail=detail, nc=nc)
 
   list(mta.model=mta.model, result=res)
@@ -166,11 +172,12 @@ run.mta <- function(model, solv.pars, detail) {
 
 ### --- rMTA --- ###
 
-rmta <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=100, mta.pars=list(), mip.pars=list(), qp.pars=list()) {
+rmta <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, k=100, mta.pars=list(), mip.pars=list(), qp.pars=list()) {
   # the function for running rMTA (with MTA of the original MIQP version); k is the rMTA-specific parameter
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
   # rxns are the indices or IDs or rxns to run MTA on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
+  # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
   # detail: whether to return more details or only the MTA scores
   # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(mta.model, result.mta, result.moma, result.rmta)
@@ -178,6 +185,17 @@ rmta <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=100
   # formulate MTA model for either direction (dflux and -dflux)
   mta.model <- form.mta(model, flux0, dflux, mta.pars)
   mta.model0 <- form.mta(model, flux0, -dflux, mta.pars)
+
+  if (!is.null(ko)) {
+    ko <- all2idx(model, ko)
+    mta.model$lb[ko] <- 0
+    mta.model$ub[ko] <- 0
+    mta.model0$lb[ko] <- 0
+    mta.model0$ub[ko] <- 0
+    model$lb[ko] <- 0
+    model$ub[ko] <- 0
+  }
+
   # solve the MTA models across the rxns for both models
   message("rmta(): Running MTA for dflux.")
   res1 <- run.ko.screen(mta.model, rxns, run.mta, solv.pars=mip.pars, detail=detail, nc=nc)

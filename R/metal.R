@@ -3,11 +3,12 @@
 
 ### --- metal --- ###
 
-metal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, solv.pars=list()) {
+metal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
   # the main function for running metal
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
   # rxns are the indices or IDs or rxns to run metal on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
+  # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
   # detail: whether to return more details or only the MTA scores
   # return both the metal.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result)
@@ -16,6 +17,11 @@ metal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, solv
   metal.model <- form.metal(model, flux0, dflux)
 
   # solve the metal models
+  if (!is.null(ko)) {
+    ko <- all2idx(metal.model, ko)
+    metal.model$lb[ko] <- 0
+    metal.model$ub[ko] <- 0
+  }
   res <- run.ko.screen(metal.model, rxns, run.metal, solv.pars=solv.pars, detail=detail, nc=nc)
 
   list(metal.model=metal.model, result=res)
@@ -151,7 +157,7 @@ run.metal <- function(model, solv.pars, detail) {
 
 ### --- additional variations of metal --- ###
 
-mmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, n=1, seeds=1:n, detail=TRUE, solv.pars=list()) {
+mmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, n=1, seeds=1:n, detail=TRUE, solv.pars=list()) {
   # running multiple metal models including the original one, with the additional "control" models using: 1. dflux <- -dflux; 2. dflux <- a set of random orthogonal dflux vectors
   # n: the number of random orthogonal dflux vectors to generate (and thus the random metal models to run)
   # seeds: the seeds for generating the random orthogonal dflux vectors, its length is equal to n; or NULL meaning do not set seed
@@ -167,12 +173,12 @@ mmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, n=1, seeds=1:n, 
 
   # original model
   message("mmetal(): Running metal.")
-  res <- metal(model, flux0, dflux, rxns, nc, detail, solv.pars)
+  res <- metal(model, flux0, dflux, rxns, ko, nc, detail, solv.pars)
 
   # control models
   ctrls <- sapply(1:length(dfs), function(i) {
     message("mmetal(): Running control #", i, ".")
-    res <- metal(model, flux0, dfs[[i]], rxns, nc, detail=FALSE, solv.pars)
+    res <- metal(model, flux0, dfs[[i]], rxns, ko, nc, detail=FALSE, solv.pars)
     res$result$score.mta
   })
   med <- apply(ctrls, 1, median)
@@ -216,11 +222,12 @@ get.ortho.vec <- function(x, seed=NULL) {
   y
 }
 
-rmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=100, lp.pars=list(), qp.pars=list()) {
+rmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, k=100, lp.pars=list(), qp.pars=list()) {
   # the function for running a "robust" version of metal similary to rMTA (basically, rMTA with metal rather than the original MIQP version of MTA); k is the rMTA-specific parameter
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
   # rxns are the indices or IDs or rxns to run MTA on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
+  # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
   # detail: whether to return more details or only the MTA scores
   # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result.metal, result.moma, result.rmetal)
@@ -228,6 +235,17 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", nc=1L, detail=TRUE, k=1
   # formulate metal model for either direction (dflux and -dflux)
   metal.model <- form.metal(model, flux0, dflux)
   metal.model0 <- form.metal(model, flux0, -dflux)
+
+  if (!is.null(ko)) {
+    ko <- all2idx(model, ko)
+    metal.model$lb[ko] <- 0
+    metal.model$ub[ko] <- 0
+    metal.model0$lb[ko] <- 0
+    metal.model0$ub[ko] <- 0
+    model$lb[ko] <- 0
+    model$ub[ko] <- 0
+  }
+
   # solve the MTA models across the rxns for both models
   message("rmetal(): Running metal for dflux.")
   res1 <- run.ko.screen(metal.model, rxns, run.metal, solv.pars=lp.pars, detail=detail, nc=nc)
