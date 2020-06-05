@@ -62,7 +62,7 @@ fva <- function(model, rxns="all", nc=1L, biomass=NULL, biomass.rgx="biomass", s
   if (!is.null(biomass)) {
     if (!is.numeric(biomass) || biomass<0 || biomass>1) stop("Invalid biomass requirement.")
     bm.idx <- get.biomass.idx(model, biomass.rgx)
-    model <- set.rxn.bounds(model, bm.idx, lbs=biomass, relative=TRUE, nc=1L, solv.pars)
+    model <- set.rxn.bounds(model, bm.idx, lbs=biomass, relative=TRUE, nc=1L, solv.pars=solv.pars)
   }
   message("FVA: computing minimal fluxes, progress:")
   min <- get.opt.fluxes(model, rxns, "min", nc, solv.pars)

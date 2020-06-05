@@ -401,9 +401,9 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1
 
   x <- all2idx(model, rxns)
   if (relative) {
-    vmaxs <- get.opt.fluxes(model, x, "max", nc, solv.pars)
+    suppressMessages( vmaxs <- get.opt.fluxes(model, x, "max", nc, solv.pars) )
     if (!is.null(lbs)) {
-      vmins <- get.opt.fluxes(model, x, "min", nc, solv.pars)
+      suppressMessages( vmins <- get.opt.fluxes(model, x, "min", nc, solv.pars) )
       model$lb[x] <- lbs * ifelse(vmins<0, vmins, vmaxs)
     }
     if (!is.null(ubs)) model$ub[x] <- ubs * vmaxs
