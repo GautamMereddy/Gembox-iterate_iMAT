@@ -137,6 +137,7 @@ run.imat <- function(imat.model, imat.pars, solv.pars) {
   if (imat.pars$mode==0) {
     # mode 0: solving the model only once to determine (de)activated reactions
     milp.out <- solve.model(imat.model, pars=solv.pars)
+    if (milp.out[[1]]$stat %in% .pkg.const$infeas.stat) stop("Stopped due to infeasible solution.")
     xopt <- get.xopt(imat.model, milp.out, imat.pars)
     imat.model$fluxes.int.imat <- get.imat.opt.flux.int(imat.model, xopt)
     imat.model$solver.out <- milp.out
@@ -159,16 +160,10 @@ get.xopt <- function(imat.model, milp.out, pars) {
   # two parameters called sol and sol.major.cutoff should be in pars, sol specifies which solution to use, if 0 then pool together all solutions and get a consensus solution, that if >= sol.major.cutoff fraction of integer solution is 1, then set the consensus to 1, otherwise set the consensus to 0
 
   if (pars$sol==0) {
-    xopt <- do.call(cbind, lapply(milp.out, function(x) {
-      if (x$stat %in% .pkg.const$ok.stat) x$xopt else NULL
-    }))
-    if (is.null(xopt)) stop("Potential issues in all MILP solutions.")
+    xopt <- do.call(cbind, lapply(milp.out, function(x) x$xopt))
     xopt <- rowMeans(xopt)
     xopt[imat.model$vtype=="I"] <- as.numeric(xopt[imat.model$vtype=="I"]>=pars$sol.major.cutoff)
-  } else {
-    if (!milp.out[[pars$sol]]$stat %in% .pkg.const$ok.stat) stop("Potential issues in the selected MILP solution.")
-    xopt <- milp.out[[pars$sol]]$xopt
-  }
+  } else xopt <- milp.out[[pars$sol]]$xopt
   xopt
 }
 
@@ -240,7 +235,9 @@ imat.mode2 <- function(imat.model, imat.pars, solv.pars) {
   # return a list(solver.out, flux.int.imat), solver.out is a data.table of the min/max fluxes for all rxns, flux.int.imat is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
   solv.pars$nsol <- 1
-  obj.opt <- solve.model(imat.model, pars=solv.pars)[[1]]$obj
+  milp.out <- solve.model(imat.model, pars=solv.pars)
+  if (milp.out[[1]]$stat %in% .pkg.const$infeas.stat) stop("Stopped due to infeasible solution.")
+  obj.opt <- milp.out[[1]]$obj
   imat.model.opt <- add.constraint(imat.model, 1:length(imat.model$c), imat.model$c, obj.opt, obj.opt)
   fva.res <- fva(imat.model.opt, rxns="all", nc=imat.pars$nc, solv.pars=solv.pars)
   fint <- ifelse(fva.res$vmin>=imat.pars$flux.act, 1L, ifelse(fva.res$vmax<= -imat.pars$flux.act, -1L, ifelse(fva.res$vmax<=imat.pars$flux.inact & fva.res$vmin>= -imat.pars$flux.inact, 0L, 9L)))

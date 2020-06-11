@@ -99,8 +99,10 @@
   `132`="CPXMIP_DETTIME_LIM_INFEAS"
 )
 
-# optimal or "ok" solver status
-.pkg.const$ok.stat <- c(.pkg.const$cpx.stat.code[as.character(c(101,102,128,129,130))], c("OPTIMAL","SOLUTION_LIMIT","USER_OBJ_LIMIT"))
+# optimal or "ok" solver status -- solve.model() will give warning if *not* among these results
+.pkg.const$ok.stat <- c(.pkg.const$cpx.stat.code[as.character(c(1,101,102,128,129,130))], c("OPTIMAL","SOLUTION_LIMIT","USER_OBJ_LIMIT"))
+# infeasible solver status -- algorithms like iMAT will throw error and stop if among these results
+.pkg.const$infeas.stat <- c(grep("INFEAS|FAIL", .pkg.const$cpx.stat.code, value=TRUE), "INFEASIBLE")
 
 
 ### --- showing/setting global variables --- ###

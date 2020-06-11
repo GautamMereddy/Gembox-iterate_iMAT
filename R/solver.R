@@ -29,18 +29,18 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
     } else nsol <- 1
     res <- Rcplex2::Rcplex(c, A, b, Q, lb, ub, x0, pars, csense, sense, vtype, nsol)
     if (!is.null(names(res))) res <- list(res)
-    if (!res[[1]]$status %in% c(1,101,102,128,129,130)) warning("Potential issue, solver status: ", res[[1]]$status, ".")
 
     tmpf <- function(x) {
       res <- list(stat=.pkg.const$cpx.stat.code[as.character(x$status)], obj=x$obj, xopt=x$xopt)
-      if (x$status %in% c(2,118,12)) {
-        # unbounded (2,118) or possibly unbounded (12, maybe others but I'm not sure) problem
+      if (x$status %in% c(2,118)) {
+        # unbounded (2,118) problem
         if (objsense=="min") res$obj <- -Inf
         if (objsense=="max") res$obj <- Inf
       }
       res
     }
     res <- lapply(res, tmpf)
+    if (!res[[1]]$stat %in% .pkg.const$ok.stat) warning("Potential issue, solver status: ", res[[1]]$stat, ".")
 
   } else if (.pkg.var$solver=="gurobi") {
 
@@ -50,7 +50,7 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
     }
     res <- gurobi::gurobi(m, pars)
 
-    if (!res$status %in% c("OPTIMAL","SOLUTION_LIMIT","USER_OBJ_LIMIT")) warning("In solve.model(): Potential issue, solver status: ", res$status, ".", call.=FALSE)
+    if (!res$status %in% .pkg.const$ok.stat) warning("Potential issue, solver status: ", res$status, ".")
     if ("pool" %in% names(res)) {
       res <- lapply(res$pool, function(x) list(stat=res$status, obj=x$objval, xopt=x$x))
     } else res <- list(stat=res$status, obj=res$objval, xopt=res$x)
