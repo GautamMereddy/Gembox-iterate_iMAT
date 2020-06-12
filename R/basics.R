@@ -42,13 +42,13 @@ get.transport.info <- function(model, mets="all", c1="c", c2="e", cell=NULL) {
   # get the info on metabolites that are transported across membrane, between two compartments
   # mets: metabolites of interest, give as ID as in model$mets but w/o compartment suffix; default to "all" (all possible metabolites across the two compartments as specificed with c1 and c2)
   # c1 and c2: two compartments
-  # cell: NULL for unicellular model; for multicellular model, can be used to specify which cell e.g. cell="cell1", then non-extracellular compartment will be only for that cell
+  # cell: for multicellular model, can be used to specify which cell e.g. cell="cell1", then non-extracellular compartment will be only for that cell; by default NULL for all rxns (will match by suffices like "_cell[0-9]+" in multicellular models)
   # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment suffix; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met in c1 in the rxn); equ (reaction equation); gene (transporter genes mapped to rxn)
 
   tmpf <- function(mets, c1, c2, cell) {
     mets.in <- mets
-    if (!is.null(cell) && c1!="e") mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")_",cell,"$") else mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,"$)")
-    if (!is.null(cell) && c2!="e") mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")_",cell,"$") else mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,"$)")
+    if (!is.null(cell) && c1!="e") mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")_",cell,"$") else mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")(_cell[0-9]+|)$")
+    if (!is.null(cell) && c2!="e") mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")_",cell,"$") else mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")(_cell[0-9]+|)$")
     mets1 <- stringr::str_match(model$mets, mets1.rgx)
     mets2 <- stringr::str_match(model$mets, mets2.rgx)
     mets <- intersect(mets1[,2], mets2[,2])
