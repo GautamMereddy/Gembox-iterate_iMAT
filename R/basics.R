@@ -74,7 +74,7 @@ get.transport.info <- function(model, mets="all", c1="c", c2="e", cell=NULL) {
   # get the info on metabolites that are transported across membrane, between two compartments
   # mets: metabolites of interest, give as ID as in model$mets but w/o compartment suffix; default to "all" (all possible metabolites across the two compartments as specificed with c1 and c2)
   # c1 and c2: two compartments
-  # cell: for multicellular model, can be used to specify which cell e.g. cell="1", then non-extracellular compartment will be only for that cell; if NULL, then will get results for any cell, but the reactions for each cell will be separated
+  # cell: for multicellular model, can be used to specify which cell e.g. cell=1, then non-extracellular compartment will be only for that cell; if NULL, then will get results for any cell, but the reactions for each cell will be separated
   # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment suffix; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met in c1 in the rxn); equ (reaction equation); gene (transporter genes mapped to rxn)
 
   tmpf <- function(mets, c1, c2, cell) {

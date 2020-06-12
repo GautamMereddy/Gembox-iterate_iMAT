@@ -209,13 +209,13 @@ pathway.gsea <- function(dflux.res, pathways, value.name="lfc.abs", id.name="rxn
   res <- res[order(padj, pval)]
 }
 
-match.id.x2 <- function(model, c0="cell1", c1="cell2", ids="all", by=c("rxns","mets")) {
+match.id.x2 <- function(model, c0=1, c1=2, ids="all", by=c("rxns","mets")) {
   # a helper function to find common rxns or mets between two cells (c1 and c2) in a multi-cellular model
 
   by <- match.arg(by)
 
-  r0 <- stringr::str_match(model[[by]], paste0("(.*)_",c0,"$"))
-  r1 <- stringr::str_match(model[[by]], paste0("(.*)_",c1,"$"))
+  r0 <- stringr::str_match(model[[by]], paste0("(.*)_cell",c0,"$"))
+  r1 <- stringr::str_match(model[[by]], paste0("(.*)_cell",c1,"$"))
   rs <- intersect(r0[,2], r1[,2])
   rs <- rs[!is.na(rs)]
   r0 <- r0[match(rs, r0[,2]),,drop=FALSE]
@@ -240,7 +240,7 @@ match.id.x2 <- function(model, c0="cell1", c1="cell2", ids="all", by=c("rxns","m
   res
 }
 
-get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.flux.x2 <- function(model, c0=1, c1=2, rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # diff.flux for multi-cellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
   # by default, rxns=="all": do diff.flux for all reactions that are not exlusively in the extracellular space; or specify rxns by their IDs as in model$rxns but w/o the cell number suffix
   # method: df method to use
@@ -272,7 +272,7 @@ get.diff.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns="all", method=c
   res <- data.table(rxn=rxns, res)
 }
 
-get.diff.comb.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.comb.flux.x2 <- function(model, c0=1, c1=2, rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # do differential flux analysis for the linear combination of fluxes of rxns, for a multi-cellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
   # rxns is a list, each element is a vector of reaction indices or IDs (as in model$rxns)
   # coefs is a list in the matched order with rxns, each element contains the coefficient for the linear combination
@@ -308,7 +308,7 @@ get.diff.comb.flux.x2 <- function(model, c0="cell1", c1="cell2", rxns, coefs, me
   res <- data.table(id=tmp, res)
 }
 
-get.diff.transport.flux.x2 <- function(model, cell0="cell1", cell1="cell2", c1="c", c2="e", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.transport.flux.x2 <- function(model, cell0=1, cell1=2, c1="c", c2="e", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # get.diff.transport.flux for multi-cellular model, between the two cells, i.e. cell1 (_cell2) vs cell0 (_cell1)
   # c1 and c2: the two compartments for the transport
   # this function will do df of the net (summed) fluxes for each metabolite being transported from compartment 2 to compartment 1
@@ -322,7 +322,7 @@ get.diff.transport.flux.x2 <- function(model, cell0="cell1", cell1="cell2", c1="
   get.diff.comb.flux.x2(model, cell0, cell1, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
 }
 
-get.diff.flux.by.met.x2 <- function(model, c0="cell1", c1="cell2", mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.flux.by.met.x2 <- function(model, c0=1, c1=2, mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # diff.flux.by.met for multi-cellular model, between the two cells, i.e. c1 (_cell2) vs c0 (_cell1)
   # will just re-use get.diff.flux.by.met; but perform analysis always for all intracellular metabolites
   # in the result, metabolite id correspond to those in the single cellular model
