@@ -18,7 +18,7 @@ exprs2int <- function(model, x, q.lo=0.25, q.hi=0.75, na2zero=TRUE) {
   message(sprintf("%d model genes not in the expression data,", sum(na.idx)))
   qlo <- quantile(x, q.lo, na.rm=TRUE)
   qhi <- quantile(x, q.hi, na.rm=TRUE)
-  x <- ifelse(x<qlo, -1L, ifelse(x>qhi, 1L, 0L))
+  x <- ifelse(x<=qlo, -1L, ifelse(x>=qhi, 1L, 0L))
   if (na2zero) {
     x[na.idx] <- 0L
     message("these gene values are set to 0.")
