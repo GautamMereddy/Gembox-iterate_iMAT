@@ -317,7 +317,7 @@ get.diff.transport.flux.x2 <- function(model, cell0=1, cell1=2, c1="c", c2="e", 
   # padj.cutoff, r.cutoff, df.cutoff are used to determine the significantly changed reactions; the default values are arbitrary
 
   tx <- get.transport.info(model, c1=c1, c2=c2, cell=cell0)
-  rxns <- lapply(tx, function(x) stringr::str_match(x$rxn, paste0("(.*)_",cell0,"$"))[,2])
+  rxns <- lapply(tx, function(x) stringr::str_match(x$rxn, paste0("(.*)_cell",cell0,"$"))[,2])
   coefs <- lapply(tx, function(x) x$coef)
   get.diff.comb.flux.x2(model, cell0, cell1, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
 }
