@@ -490,7 +490,7 @@ set.medium1 <- function(model, medium, set.all=FALSE, except=c("h","na1","k","nh
   m <- copy(as.data.table(medium))
   setnames(m, c("met", "conc"))
   bndr <- get.boundary.rxns(model, cp="e", detail=TRUE)
-  bndr[, met:=stringr::str_match(met, "(.*)\\[e\\]|_e$")[,2]]
+  bndr[, met:=stringr::str_match(met, "(.*)(\\[e\\]|_e)$")[,2]]
   bndr <- bndr[!met %in% except]
   if (!set.all) bndr <- bndr[met %in% m$met]
 
