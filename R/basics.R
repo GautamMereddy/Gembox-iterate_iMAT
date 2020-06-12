@@ -38,17 +38,49 @@ get.biomass.idx <- function(model, rgx="biomass") {
   res
 }
 
+get.cmets <- function(model, cp, cell=NULL, out=c("idx","mets","metNames")) {
+  # get the metabolite indices or names (determined by out) in a specific compartment (cp, e.g. "e") and specific cell (cell, default NULL means any cell, or e.g. cell=1 means "_cell1")
+  
+  out <- match.arg(out)
+  if (is.null(cell)) res <- grep(paste0(".*(\\[",cp,"\\]|_",cp,")(_cell[0-9]+|)$"), model$mets) else res <- grep(paste0(".*(\\[",cp,"\\]|_",cp,")_cell",cell,"$"), model$mets)
+  if (out!="idx") res <- model[[out]][res]
+  res
+}
+
+get.boundary.rxns <- function(model, cp="e", out=c("idx","rxns","rxnNames"), detail=FALSE) {
+  # get the boundary reactions in a model: reactions exchanging *a singe* metabolite at the system boundary of the model
+  # cp: compartment of the boundary reaction; if NULL then any compartment
+  # out: return reaction idx, or "rxns", "rxnNames" when detail is FALSE
+  # detail: if FALSE return a vector of boundary reactions, if TRUE return a data.table containing: rxn.id, rxn, met.id, met, coef (coefficient for the exchanged metabolite, by convention this is usually -1)
+
+  out <- match.arg(out)
+  rids <- which(Matrix::colSums(model$S!=0)==1)
+  mids <- unlist(rxns2mets(model, rids))
+  if (!is.null(cp)) {
+    mets <- get.cmets(model, cp)
+    idx <- mids %in% mets
+    mids <- mids[idx]
+    rids <- rids[idx]
+  }
+  if (detail) {
+    res <- data.table(rxn.id=rids, rxn=model$rxns[rids], met.id=mids, met=model$mets[mids], coef=Matrix::colSums(model$S[mids,rids,drop=FALSE]))
+  } else {
+    if (out=="idx") res <- rids else res <- model[[out]][rids]
+  }
+  res
+}
+
 get.transport.info <- function(model, mets="all", c1="c", c2="e", cell=NULL) {
   # get the info on metabolites that are transported across membrane, between two compartments
   # mets: metabolites of interest, give as ID as in model$mets but w/o compartment suffix; default to "all" (all possible metabolites across the two compartments as specificed with c1 and c2)
   # c1 and c2: two compartments
-  # cell: for multicellular model, can be used to specify which cell e.g. cell="cell1", then non-extracellular compartment will be only for that cell; by default NULL for all rxns (will match by suffices like "_cell[0-9]+" in multicellular models)
+  # cell: for multicellular model, can be used to specify which cell e.g. cell="1", then non-extracellular compartment will be only for that cell; if NULL, then will get results for any cell, but the reactions for each cell will be separated
   # return a list by metabolite, named by metabolite IDs as in model$mets but w/o compartment suffix; each element (for each metabolite) is a data.table, with columns: id (rxn indices); rxn (rxn IDs as in model$rxns); coef (coefficient for the met in c1 in the rxn); equ (reaction equation); gene (transporter genes mapped to rxn)
 
   tmpf <- function(mets, c1, c2, cell) {
     mets.in <- mets
-    if (!is.null(cell) && c1!="e") mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")_",cell,"$") else mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")(_cell[0-9]+|)$")
-    if (!is.null(cell) && c2!="e") mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")_",cell,"$") else mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")(_cell[0-9]+|)$")
+    if (!is.null(cell) && c1!="e") mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")_cell",cell,"$") else mets1.rgx <- paste0("(.*)(\\[",c1,"\\]|_",c1,")$")
+    if (!is.null(cell) && c2!="e") mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")_cell",cell,"$") else mets2.rgx <- paste0("(.*)(\\[",c2,"\\]|_",c2,")$")
     mets1 <- stringr::str_match(model$mets, mets1.rgx)
     mets2 <- stringr::str_match(model$mets, mets2.rgx)
     mets <- intersect(mets1[,2], mets2[,2])
@@ -71,12 +103,12 @@ get.transport.info <- function(model, mets="all", c1="c", c2="e", cell=NULL) {
   }
 
   if (is.null(cell)) {
-    cells <- unique(c(stringr::str_match(model$mets, "cell.$")))
+    cells <- unique(stringr::str_match(model$mets, "cell(.)$")[,2])
     cells <- cells[!is.na(cells)]
     if (length(cells)!=0) {
       tmp <- lapply(1:length(cells), function(i) {
         res <- tmpf(mets, c1, c2, cells[i])
-        if (!is.null(res)) names(res) <- paste0(names(res),"_",cells[i])
+        if (!is.null(res)) names(res) <- paste0(names(res),"_cell",cells[i])
         res
       })
       res <- do.call(c, tmp)
@@ -86,7 +118,7 @@ get.transport.info <- function(model, mets="all", c1="c", c2="e", cell=NULL) {
   res
 }
 
-rxns2mets <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out="idx") {
+rxns2mets <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out=c("idx","mets","metNames")) {
   # map reactions to metabolites, return a list
   # mode: 0: all; -1: reactants; 1: products
   # rev.mode: for a reversible reaction, 1: mode based on the direction it is written in; 0: always return all
@@ -95,6 +127,7 @@ rxns2mets <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out="idx") {
   # match.arg, below are workarounds since it cannot match numerical arguments
   mode <- match.arg(as.character(mode[1]), c("0","-1","1"))
   rev.mode <- match.arg(as.character(rev.mode[1]), c("1","0"))
+  out <- match.arg(out)
 
   idx <- all2idx(model, x)
   names(idx) <- x
@@ -109,7 +142,7 @@ rxns2mets <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out="idx") {
   })
 }
 
-mets2rxns <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out="idx") {
+mets2rxns <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out=c("idx","rxns","rxnNames")) {
   # map metabolites to reactions, return a list
   # mode: 0: all; -1: reactants; 1: products
   # rev.mode: for a reversible reaction, 1: mode based on the direction it is written in; 0: always return all
@@ -117,6 +150,7 @@ mets2rxns <- function(model, x, mode=c(0,-1,1), rev.mode=c(1,0), out="idx") {
 
   mode <- match.arg(as.character(mode[1]), c("0","-1","1"))
   rev.mode <- match.arg(as.character(rev.mode[1]), c("1","0"))
+  out <- match.arg(out)
 
   idx <- all2idx(model, x)
   names(idx) <- x
@@ -145,12 +179,13 @@ rxns2genes <- function(model, x) {
   lapply(stringr::str_extract_all(model$rules[idx], "[1-9][0-9]*"), function(x) unique(model$genes[as.numeric(x)]))
 }
 
-genes2rxns <- function(model, genes, mode=c(0,1), out="idx") {
+genes2rxns <- function(model, genes, mode=c(0,1), out=c("idx","rxns","rxnNames")) {
   # map gene symbols to reaction indices, return as a list
   # mode==0 for any reactions involving the gene; mode==1 for reactions where the gene is essential (corresponding to that if the gene is removed, then the reaction cannot happen based on model$rules)
   # out: output mode, default to indices; or "rxns", "rxnNames" etc.
 
   mode <- match.arg(as.character(mode[1]), c("0","1"))
+  out <- match.arg(out)
 
   if (mode=="0") {
     r2g <- rxns2genes(model, 1:length(model$rules))
@@ -415,7 +450,8 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1
 }
 
 set.medium <- function(model, medium, set.all=FALSE, except=c("h","na1","k","nh4","ca2","fe2","oh1","cl","hco3","ac","so4","pi","h2o","o2","co2"), cells.per.ml=2e5, cell.gdw=4e-10, dbl.hr=24) {
-  # set model constraint based on medium composition
+  # set model constraint based on medium composition, by adjusting flux bounds of cross-plasma membrane transport reactions
+  # this for now doesn't work ideally for multicellular models
   # medium: a data.table with the first column being names of metabolites as in model$mets (but w/o compartment suffix), second column being concentration in mM in the medium
   # cells.per.ml: cell count per mL; cell.gdw: dry weight per cell in grams; dbl.hr: cell doubling time in hours (default to approximate values for HeLa cells in a reasonably normal culture)
   # for metabolites transported by a single reaction, the corresponding lb or ub will be adjusted; for metabolites transported by multiple reactions, will add rows to model$S constraining the summed transport fluxes
@@ -443,6 +479,27 @@ set.medium <- function(model, medium, set.all=FALSE, except=c("h","na1","k","nh4
     }
   }
   model 
+}
+
+set.medium1 <- function(model, medium, set.all=FALSE, except=c("h","na1","k","nh4","ca2","fe2","oh1","cl","hco3","ac","so4","pi","h2o","o2","co2"), cells.per.ml=2e5, cell.gdw=4e-10, dbl.hr=24) {
+  # set model constraint based on medium composition, by adjusting flux bounds of the boundary reactions
+  # medium: a data.table with the first column being names of metabolites as in model$mets (but w/o compartment suffix), second column being concentration in mM in the medium
+  # cells.per.ml: cell count per mL; cell.gdw: dry weight per cell in grams; dbl.hr: cell doubling time in hours (default to approximate values for HeLa cells in a reasonably normal culture)
+  # if set.all==FALSE, metabolites whose info is not given in medium is not touched (regarded as unknown rather than not present in the medium); otherwise, all other non-specified extracellular metabolites (excluding those given in except, e.g. bulk inorganic species) are constrained to be export only
+
+  m <- copy(as.data.table(medium))
+  setnames(m, c("met", "conc"))
+  bndr <- get.boundary.rxns(model, cp="e", detail=TRUE)
+  bndr[, met:=stringr::str_match(met, "(.*)\\[e\\]|_e$")[,2]]
+  bndr <- bndr[!met %in% except]
+  if (!set.all) bndr <- bndr[met %in% m$met]
+
+  bnd <- m[match(bndr$met, met), conc] / (1000*cells.per.ml*cell.gdw*dbl.hr) / bndr$coef
+  bnd[is.na(bnd)] <- 0
+  ii <- bnd>0 & bnd<model$ub[bndr$rxn.id]
+  model <- set.rxn.bounds(model, bndr$rxn.id[ii], ubs=bnd[ii])
+  ii <- bnd<0 & bnd>model$lb[bndr$rxn.id]
+  model <- set.rxn.bounds(model, bndr$rxn.id[ii], lbs=bnd[ii])
 }
 
 rm.blocked.rxns <- function(model, nc=1L, rm.extra=FALSE, update.genes=FALSE, solv.pars=get.pars("lp", list())) {
