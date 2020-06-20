@@ -149,14 +149,16 @@ make.conjunct.model <- function(model, n=2) {
   # and the rest
   not.erxn.ids <- which(!tmp)
 
+  res <- model
+
   # label the base model as cell1
   tmpf <- function(a, b="not.erxn.ids") {
     if (a %in% names(model)) {
       if (is.null(b)) {
-        model[[a]] <<- paste0(model[[a]], "_cell1")
+        res[[a]] <<- paste0(model[[a]], "_cell1")
       } else {
         b <- get(b)
-        model[[a]][b] <<- paste0(model[[a]][b], "_cell1")
+        res[[a]][b] <<- paste0(model[[a]][b], "_cell1")
       }
     }
   }
@@ -164,23 +166,30 @@ make.conjunct.model <- function(model, n=2) {
   for (i in c("mets","metNames")) tmpf(i, "imet.ids")
   for (i in c("genes","gene.ids")) tmpf(i, NULL)
 
-  #
-
   # function for adding one cell at a time
   add.cell <- function(i) {
 
     # 1. simple concatenation or concatenation with added suffix indicating cell index
     tmpf <- function(a, b="not.erxn.ids", sfx=TRUE) {
       if (a %in% names(model)) {
-        if (sfx) sfx <- paste0("_cell",i) else sfx <- ""
-        if (is.null(b)) {
-          model[[a]] <<- c(model[[a]], paste0(model[[a]], sfx))
+        if (sfx) {
+          sfx <- paste0("_cell",i)
+          if (is.null(b)) {
+            res[[a]] <<- c(res[[a]], paste0(model[[a]], sfx))
+          } else {
+            b <- get(b)
+            res[[a]] <<- c(res[[a]], paste0(model[[a]][b], sfx))
+          }
         } else {
-          b <- get(b)
-          model[[a]] <<- c(model[[a]], paste0(model[[a]][b], sfx))
+          if (is.null(b)) {
+            res[[a]] <<- c(res[[a]], model[[a]])
+          } else {
+            b <- get(b)
+            res[[a]] <<- c(res[[a]], model[[a]][b])
+          }
         }
-        res
       }
+      NULL
     }
     for (x in c("lb","ub","c")) tmpf(x, sfx=FALSE)
     for (x in c("metFormulas","rowlb","rowub","b")) tmpf(x, "imet.ids", FALSE)
@@ -188,41 +197,65 @@ make.conjunct.model <- function(model, n=2) {
     for (x in c("mets","metNames")) tmpf(x, "imet.ids")
     for (x in c("genes","gene.ids")) tmpf(x, NULL)
     # for rowlb, rowub and b, adjust for the fact that multiple cells are now producing/consuming metabolites
-    model$rowlb[emet.ids] <<- model$rowlb[emet.ids] + em.rowlb
-    model$rowub[emet.ids] <<- model$rowub[emet.ids] + em.rowub
-    if ("b" %in% names(model)) model$b[emet.ids] <<- model$b[emet.ids] + em.b
+    res$rowlb[emet.ids] <<- res$rowlb[emet.ids] + em.rowlb
+    res$rowub[emet.ids] <<- res$rowub[emet.ids] + em.rowub
+    if ("b" %in% names(model)) res$b[emet.ids] <<- res$b[emet.ids] + em.b
 
     # 2. S matrix
     # the order of reactions is as above; for the (a) part, the matrix is just the original S unchanged but added more rows of zeros for the intracellular metabolites of the second cell; for the (b) part, the matrix is based on the not.erxn.ids columns of the original S matrix just with the rows corresponding to imet.ids "cut and pasted" to bottom
     # this is the (b) part:
-    tmp <- model$S[, not.erxn.ids]
+    tmp <- res$S[, not.erxn.ids]
     tmp[imet.ids, ] <- 0
     tmp <- rbind(tmp, model$S[imet.ids, not.erxn.ids])
     # cbind (a) and (b)
-    model$S <<- cbind(rbind(model$S, sparseMatrix(NULL, NULL, dims=c(length(imet.ids),ncol(model$S))), tmp))
+    res$S <<- cbind(rbind(res$S, sparseMatrix(NULL, NULL, dims=c(length(imet.ids),ncol(res$S)))), tmp)
 
     # 3. rules (not using "grRules" or "rxnGeneMat", and these are also not included in the resulting model)
     # just need to correct the gene indices for the added cell
     tmp <- model$rules[not.erxn.ids]
-    tmp <- str_replace_all(tmp, "[0-9]+", function(x) {
+    tmp <- stringr::str_replace_all(tmp, "[0-9]+", function(x) {
       x <- as.integer(x)
-      if (x==0) 0 else x+length(model$genes)
+      if (x==0) 0 else x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
     })
-    model$rules <<- c(model$rules, tmp)
+    res$rules <<- c(res$rules, tmp)
     # for erxn.ids that are mapped to genes, then need to recreate rules for these reactions as sth like "(rules.cell1) | (rules.cell2)"
     tmp <- rxns2genes(model, erxn.ids)
     dupg.erxn.ids <- erxn.ids[sapply(tmp, length)!=0]
-    tmp <- str_replace_all(rules[dupg.erxn.ids], "[0-9]+", function(x) {
+    tmp <- stringr::str_replace_all(model$rules[dupg.erxn.ids], "[0-9]+", function(x) {
       x <- as.integer(x)
-      if (x==0) 0 else x+length(model$genes)
+      if (x==0) 0 else x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
     })
-    model$rules[dupg.erxn.ids] <<- paste0("(",model$rules[dupg.erxn.ids],") | (",tmp,")")
+    res$rules[dupg.erxn.ids] <<- paste0("(",res$rules[dupg.erxn.ids],") | (",tmp,")")
   }
 
   # add the remaining (n-1) cells
   for (i in 2:n) add.cell(i)
 
-  model
+  res
 }
 
+set.cell.fractions <- function(model.sc, model.mc, cell.fracs, nc=1L) {
+  # adjust the fractions of different cells in a multicellular model
+  # this is achieved by scaling the reaction bounds of the different cells, computed from the single-cell base model with FVA
+  # nc: number of cores used by fva()
+  # model.sc: the single-cell base model from which the multi-cellular model was constructed
+  # model.mc: the multi-cellular model constructed using make.conjunct.model()
+  # cell.fracs: a vector of cell fractions corresponding to the cells in model.mc (in the order of cell1, cell2, etc.)
+
+  # mets in the extracellular space (emet.ids)
+  emet.ids <- which(grepl("\\[e\\]$|_e$", model.sc$mets))
+  # reactions that are not exclusively extracellular
+  not.erxn.ids <- which(apply(model.sc$S, 2, function(x) any(!which(x!=0) %in% emet.ids)))
+  # bounds of these reactions
+  bnds <- fva(model.sc, not.erxn.ids, nc=nc)
+  res <- model.mc
+  ncells <- uniqueN(stringr::str_match(model.mc$genes, "cell[0-9]+$"))
+  if (length(cell.fracs)!=ncells) stop("length of cell.fracs not equal to the number of cells in the model.")
+  cell.fracs <- cell.fracs/sum(cell.fracs)
+  for (i in 1:length(cell.fracs)) {
+    x <- cell.fracs[i]
+    res <- set.rxn.bounds(res, paste0(bnds$rxn,"_cell",i), bnds$vmin*x, bnds$vmax*x)
+  }
+  res
+}
 
