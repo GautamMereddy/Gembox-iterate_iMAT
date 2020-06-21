@@ -56,15 +56,16 @@ df.fva <- function(model0, model1, rxns, coefs, nc, df.cutoff) {
              ifelse(mean0 %gt% mean1, -1, 0))))))]
 }
 
-df.fva.x2 <- function(model, rxns0, rxns1, coefs, nc, df.cutoff) {
+df.fva.x2 <- function(model, rxns0, rxns1, coefs, cell.fracs, nc, df.cutoff) {
   # a helper function to perform differential flux analysis with FVA between two sets of reactions within a model (can be used for e.g. comparing between two cells in a multi-cellular model)
   # rxns0 and rxns1 are in matched order, comparing rxns1 to rxns0
   # rxns0/1 and coefs: either rxns0/1 being two vector of reactions and coefs being 1 (df of each of these single reactions), or all being lists in the matched order in the case of df of combined fluxes
+  # cell.fracs: a vector of length two corresponding to rxns0 and rxns1: the cell fractions to adjust for
 
-  ub0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)
-  lb0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
-  ub1 <- parallel::mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)
-  lb1 <- parallel::mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)
+  ub0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)/cell.fracs[1]
+  lb0 <- parallel::mcmapply(get.opt.flux, rxns0, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)/cell.fracs[1]
+  ub1 <- parallel::mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="max"), mc.cores=nc)/cell.fracs[2]
+  lb1 <- parallel::mcmapply(get.opt.flux, rxns1, coefs, MoreArgs=list(model=model, dir="min"), mc.cores=nc)/cell.fracs[2]
   m0 <- (ub0+lb0)/2
   m1 <- (ub1+lb1)/2
   res <- data.table(lb0=lb0, ub0=ub0, mean0=m0, lb1=lb1, ub1=ub1, mean1=m1, diff.mean=m1-m0, rel.diff=(m1-m0)/abs(m0), lfc.abs=log2(abs(m1)/abs(m0)))
@@ -240,8 +241,9 @@ match.id.x2 <- function(model, c0=1, c1=2, ids="all", by=c("rxns","mets")) {
   res
 }
 
-get.diff.flux.x2 <- function(model, c0=1, c1=2, rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.flux.x2 <- function(model, c0=1, c1=2, cell.fracs=c(1,1), rxns="all", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # diff.flux for multi-cellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
+  # cell.fracs: a vector of length two, corresponding to the fraction of the two cells c0 and c1, used for adjusting the flux values
   # by default, rxns=="all": do diff.flux for all reactions that are not exlusively in the extracellular space; or specify rxns by their IDs as in model$rxns but w/o the cell number suffix
   # method: df method to use
   # nsamples: a single number, meaning to use the last N samples
@@ -258,22 +260,23 @@ get.diff.flux.x2 <- function(model, c0=1, c1=2, rxns="all", method=c("wilcox","f
     if (!"sample" %in% names(model)) stop("No sampling result found in models, cannot use method 'wilcox' or 'both'.")
     ns <- ncol(model$sample$pnts)
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-    mat0 <- model$sample$pnts[r0, (ns-nsamples+1):ns]
-    mat1 <- model$sample$pnts[r1, (ns-nsamples+1):ns]
+    mat0 <- model$sample$pnts[r0, (ns-nsamples+1):ns]/cell.fracs[1]
+    mat1 <- model$sample$pnts[r1, (ns-nsamples+1):ns]/cell.fracs[2]
     res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   } else {
-    res <- df.fva.x2(model, r0, r1, 1, nc, df.cutoff)
+    res <- df.fva.x2(model, r0, r1, 1, cell.fracs, nc, df.cutoff)
   }
   if (method=="both") {
-    tmp <- df.fva.x2(model, r0, r1, 1, nc, df.cutoff)
+    tmp <- df.fva.x2(model, r0, r1, 1, cell.fracs, nc, df.cutoff)
     res[, c("lb0","ub0","lb1","ub1","dir.fva"):=tmp[, .(lb0, ub0, lb1, ub1, dir)]]
     setnames(res, "dir", "dir.wilcox")
   }
   res <- data.table(rxn=rxns, res)
 }
 
-get.diff.comb.flux.x2 <- function(model, c0=1, c1=2, rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.comb.flux.x2 <- function(model, c0=1, c1=2, cell.fracs=c(1,1), rxns, coefs, method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # do differential flux analysis for the linear combination of fluxes of rxns, for a multi-cellular model, between the two cells, i.e. c1 (cell2) vs c0 (cell1)
+  # cell.fracs: a vector of length two, corresponding to the fraction of the two cells c0 and c1, used for adjusting the flux values
   # rxns is a list, each element is a vector of reaction indices or IDs (as in model$rxns)
   # coefs is a list in the matched order with rxns, each element contains the coefficient for the linear combination
   # this function will do df for each case corresponding to each element of the rxns and coefs lists
@@ -293,14 +296,14 @@ get.diff.comb.flux.x2 <- function(model, c0=1, c1=2, rxns, coefs, method=c("wilc
     if (!"sample" %in% names(model)) stop("No sampling result found in model, cannot use method 'wilcox' or 'both'.")
     ns <- ncol(model$sample$pnts)
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-    mat0 <- mapply(function(x,c) colSums(model$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), r0s, coefs)
-    mat1 <- mapply(function(x,c) colSums(model$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), r1s, coefs)
+    mat0 <- mapply(function(x,c) colSums(model$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), r0s, coefs)/cell.fracs[1]
+    mat1 <- mapply(function(x,c) colSums(model$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), r1s, coefs)/cell.fracs[2]
     res <- df.wilcox(mat0, mat1, 2, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   } else {
-    res <- df.fva.x2(model, r0s, r1s, coefs, nc, df.cutoff)
+    res <- df.fva.x2(model, r0s, r1s, coefs, cell.fracs, nc, df.cutoff)
   }
   if (method=="both") {
-    tmp <- df.fva.x2(model, r0s, r1s, coefs, nc, df.cutoff)
+    tmp <- df.fva.x2(model, r0s, r1s, coefs, cell.fracs, nc, df.cutoff)
     res[, c("lb0","ub0","lb1","ub1","dir.fva"):=tmp[, .(lb0, ub0, lb1, ub1, dir)]]
     setnames(res, "dir", "dir.wilcox")
   }
@@ -308,8 +311,9 @@ get.diff.comb.flux.x2 <- function(model, c0=1, c1=2, rxns, coefs, method=c("wilc
   res <- data.table(id=tmp, res)
 }
 
-get.diff.transport.flux.x2 <- function(model, cell0=1, cell1=2, c1="c", c2="e", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.transport.flux.x2 <- function(model, cell0=1, cell1=2, cell.fracs=c(1,1), c1="c", c2="e", method=c("wilcox","fva","both"), nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # get.diff.transport.flux for multi-cellular model, between the two cells, i.e. cell1 (_cell2) vs cell0 (_cell1)
+  # cell.fracs: a vector of length two, corresponding to the fraction of the two cells c0 and c1, used for adjusting the flux values
   # c1 and c2: the two compartments for the transport
   # this function will do df of the net (summed) fluxes for each metabolite being transported from compartment 2 to compartment 1
   # method: df method to use
@@ -319,11 +323,12 @@ get.diff.transport.flux.x2 <- function(model, cell0=1, cell1=2, c1="c", c2="e", 
   tx <- get.transport.info(model, c1=c1, c2=c2, cell=cell0)
   rxns <- lapply(tx, function(x) stringr::str_match(x$rxn, paste0("(.*)_cell",cell0,"$"))[,2])
   coefs <- lapply(tx, function(x) x$coef)
-  get.diff.comb.flux.x2(model, cell0, cell1, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
+  get.diff.comb.flux.x2(model, cell0, cell1, cell.fracs, rxns, coefs, method, nsamples, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
 }
 
-get.diff.flux.by.met.x2 <- function(model, c0=1, c1=2, mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
+get.diff.flux.by.met.x2 <- function(model, c0=1, c1=2, cell.fracs=c(1,1), mets="all", nsamples=4000, nc=1L, padj.cutoff=10/nsamples, r.cutoff=0.2, df.cutoff=1e-6, rdf.cutoff=0.05) {
   # diff.flux.by.met for multi-cellular model, between the two cells, i.e. c1 (_cell2) vs c0 (_cell1)
+  # cell.fracs: a vector of length two, corresponding to the fraction of the two cells c0 and c1, used for adjusting the flux values
   # will just re-use get.diff.flux.by.met; but perform analysis always for all intracellular metabolites
   # in the result, metabolite id correspond to those in the single cellular model
 
@@ -335,8 +340,8 @@ get.diff.flux.by.met.x2 <- function(model, c0=1, c1=2, mets="all", nsamples=4000
   if (!"sample" %in% names(model)) stop("No sampling result found in models, cannot proceed.")
   ns <- ncol(model$sample$pnts)
   if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
-  mat0 <- abs(model$S[m0,,drop=FALSE]) %*% abs(model$sample$pnts[, (ns-nsamples+1):ns]) / 2
-  mat1 <- abs(model$S[m1,,drop=FALSE]) %*% abs(model$sample$pnts[, (ns-nsamples+1):ns]) / 2
+  mat0 <- abs(model$S[m0,,drop=FALSE]) %*% abs(model$sample$pnts[, (ns-nsamples+1):ns]) / 2 / cell.fracs[1]
+  mat1 <- abs(model$S[m1,,drop=FALSE]) %*% abs(model$sample$pnts[, (ns-nsamples+1):ns]) / 2 / cell.fracs[2]
   res <- df.wilcox(mat0, mat1, 1, nc, padj.cutoff, r.cutoff, df.cutoff, rdf.cutoff)
   res <- data.table(id=m0, met=mets, res)
 }

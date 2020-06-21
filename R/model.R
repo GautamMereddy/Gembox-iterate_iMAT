@@ -150,6 +150,10 @@ make.conjunct.model <- function(model, n=2) {
   not.erxn.ids <- which(!tmp)
 
   res <- model
+  res$imet.ids <- imet.ids
+  res$emet.ids <- emet.ids
+  res$irxn.ids <- not.erxn.ids
+  res$erxn.ids <- erxn.ids
 
   # label the base model as cell1
   tmpf <- function(a, b="not.erxn.ids") {
@@ -242,12 +246,8 @@ set.cell.fractions <- function(model.sc, model.mc, cell.fracs, nc=1L) {
   # model.mc: the multi-cellular model constructed using make.conjunct.model()
   # cell.fracs: a vector of cell fractions corresponding to the cells in model.mc (in the order of cell1, cell2, etc.)
 
-  # mets in the extracellular space (emet.ids)
-  emet.ids <- which(grepl("\\[e\\]$|_e$", model.sc$mets))
-  # reactions that are not exclusively extracellular
-  not.erxn.ids <- which(apply(model.sc$S, 2, function(x) any(!which(x!=0) %in% emet.ids)))
-  # bounds of these reactions
-  bnds <- fva(model.sc, not.erxn.ids, nc=nc)
+  # bounds of reactions that are not exclusively extracellular
+  bnds <- fva(model.sc, model.mc$irxn.ids, nc=nc)
   res <- model.mc
   ncells <- uniqueN(stringr::str_match(model.mc$genes, "cell[0-9]+$"))
   if (length(cell.fracs)!=ncells) stop("length of cell.fracs not equal to the number of cells in the model.")

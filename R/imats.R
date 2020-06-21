@@ -234,8 +234,33 @@ update.model.imat.dflux <- function(model, imat.res, imat.pars) {
 
 ### --- iMAT for multicelllar model of two or three cells --- ###
 
-imat.mc <- function(model, expr, dflux, imat.pars=list(), solv.pars=list(), solv.pars1=list(), samp.pars=list()) {
-  # the main function for running iMAT for multicellular model of two or three cells
+imat.mc <- function(model, expr, expr.adj, cell.fracs, imat.pars=list(), solv.pars=list(), samp.pars=list()) {
+  # the main function for running iMAT for multicellular models, a simple extension on the original iMAT by taking into account cell fractions, w/o diff flux between cells
+  # expr is the output from exprs2int(); I make it separate as sometimes we need to examine and modify expr before running imat
+  # expr.adj is also output from exprs2int(), but with gene expression values adjusted for cell fractions
+  # cell.fracs: a vector of cell fractions corresponding to the cells in model (in the order of cell1, cell2, etc.)
+  # set samp.pars to NULL to skip the sampling
+  # return both the imat.model, and the result model (the updated metabolic model), in a list(imat.model, result.model)
+
+  # formulate iMAT model
+  imat.model <- form.imat.mc(model, expr, expr.adj, cell.fracs, imat.pars)
+
+  # solve the iMAT model
+  imat.model <- run.imat(imat.model, imat.pars, solv.pars)
+
+  # update the original metabolic model based on iMAT result
+  res.model <- update.model.imat(model, imat.model, imat.pars)
+
+  if (!is.null(samp.pars)) {
+    # sample the result model
+    res.model <- sample.model(res.model, samp.pars)
+  }
+
+  list(imat.model=imat.model, result.model=res.model)
+}
+
+imat.dflux.mc <- function(model, expr, dflux, imat.pars=list(), solv.pars=list(), solv.pars1=list(), samp.pars=list()) {
+  # the main function for running iMAT for multicellular model of two or three cells, with diff flux between cells
   # if imat.pars$nsteps==1, return a list(imat.model, result.model)
   # if imat.pars$nsteps==2, return a list(imat.model, imat.model.dflux, result.model), where imat.model is the original imat model from the first step, and imat.model.dflux is the diff flux part of the imat model in the second step
 
@@ -270,6 +295,96 @@ imat.mc <- function(model, expr, dflux, imat.pars=list(), solv.pars=list(), solv
 
 
 ### --- helper functions for iMAT for multicellar model of two or three cells --- ###
+
+form.imat.mc <- function(model, expr, expr.adj, cell.fracs, imat.pars) {
+  # formulate iMAT model for multicellular model by taking into account cell fractions
+  # expr and expr.adj are the outputs from exprs2int(); expr.adj is the one after adjusting for cell fraction
+  # imat.pars: the parameters for iMAT
+  pars <- get.pars("imat", imat.pars)
+
+  # get intended activity level of rxns (-1/0/1) from discretized expression data
+  rxns.int <- exprs2fluxes(model, expr)
+  tmp <- exprs2fluxes(model, expr.adj) # adjusted for cell fraction, used for exclusively extracellular reactions
+  rxns.int[model$erxn.ids] <- tmp[model$erxn.ids]
+  rxns.int[model$lb==0 & model$ub==0] <- 0
+
+  # get the cell info for the rxns
+  cells <- stringr::str_match(model$rxns, "cell[0-9]+$")
+  tmp <- unique(cells[!is.na(cell)])
+  if (length(cell.fracs)!=length(tmp)) stop("length of cell.fracs not equal to the number of cells in the model.")
+  cell.fracs <- cell.fracs/sum(cell.fracs)
+  cells <- lapply(tmp, function(x) which(cells==x))
+  # a function to adjust flux.act or flux.inact values for the cells based on their fractions
+  tmpf <- function(id, v=pars$flux.act) {
+    res <- rep(v, length(id))
+    for (i in 1:length(cells)) {
+      res[id %in% cells[[i]]] <- v*cell.fracs[i]
+    }
+    res
+  }
+
+  n.mets <- nrow(model$S)
+  n.rxns <- ncol(model$S)
+  S <- model$S
+
+  # 1. Active reactions: specify the y+ indicator variables, representing activation in the forward direction (i.e. v>flux.act)
+  rxns.act <- which(rxns.int>0)
+  n.act <- length(rxns.act)
+  v.act <- pars$flux.act
+
+  if (n.act!=0) {
+    m1 <- sparseMatrix(1:n.act, rxns.act, dims=c(n.act, n.rxns))
+    m2 <- Diagonal(n.act, x=(-tmpf(rxns.act)-pars$flux.bound))
+    S <- rbind(cbind(S, sparseMatrix(NULL, NULL, dims=c(n.mets, n.act))), cbind(m1, m2))
+  }
+
+  # 2. Reversible active reactions: for those reversible ones among the active reactions, specify the extra y- indicator variables, representing activation in the backward direction (i.e. v<-flux.act)
+  # thus, an reversible active reaction has both the y+ and y- indicator variables, because it can be active in either direction (but never both, i.e. 1 XOR 2)
+  rxns.act.rev <- which(rxns.int>0 & model$lb<0)
+  n.act.rev <- length(rxns.act.rev)
+  if (n.act.rev!=0) {
+    m1 <- sparseMatrix(1:n.act.rev, rxns.act.rev, dims=c(n.act.rev, ncol(S)))
+    m2 <- Diagonal(n.act.rev, x=tmpf(rxns.act.rev)+pars$flux.bound)
+    S <- rbind(cbind(S, sparseMatrix(NULL, NULL, dims=c(nrow(S), n.act.rev))), cbind(m1, m2))
+  }
+
+  # 3. Inactive reactions: specify the y0 indicator variables
+  # 3a. specify inactivation in the forward direction (i.e. v<flux.inact)
+  rxns.inact <- which(rxns.int<0)
+  n.inact <- length(rxns.inact)
+  if (n.inact!=0) {
+    m1 <- sparseMatrix(1:n.inact, rxns.inact, dims=c(n.inact, ncol(S)))
+    m2 <- Diagonal(n.inact, x=pars$flux.bound-tmpf(rxns.inact, pars$flux.inact))
+    S <- rbind(cbind(S, sparseMatrix(NULL, NULL, dims=c(nrow(S), n.inact))), cbind(m1, m2))
+  }
+  # 3b. for those reversible inactive reactions, need to further specify inactivation in the backward direction (i.e. v>-flux.inact)
+  # note that a reversible inactive reaction has only one y0 indicator variable, because for these reactions we want -flux.inact<v<flux.inact (3a AND 3b)
+  rxns.inact.rev <- which(rxns.int<0 & model$lb<0)
+  n.inact.rev <- length(rxns.inact.rev)
+  if (n.inact.rev!=0) {
+    m3 <- sparseMatrix(1:n.inact.rev, rxns.inact.rev, dims=c(n.inact.rev, ncol(S)-n.inact))
+    m4 <- sparseMatrix(1:n.inact.rev, match(rxns.inact.rev, rxns.inact), x=tmpf(rxns.inact.rev, pars$flux.inact)-pars$flux.bound, dims=c(n.inact.rev, n.inact))
+    S <- rbind(S, cbind(m3, m4))
+  }
+
+  # other parameters
+  n <- n.act + n.act.rev + n.inact + n.inact.rev
+  rowlb <- c(model$rowlb, rep(-pars$flux.bound, n))
+  rowub <- c(model$rowub, rep(pars$flux.bound, n))
+  n <- ncol(S) - n.rxns
+  c <- rep(c(0, 1/sum(rxns.int!=0,na.rm=TRUE)), c(n.rxns, n))
+  vtype <- ifelse(c==0, "C", "I")
+  lb <- c(model$lb, rep(0, n))
+  ub <- c(model$ub, rep(1, n))
+  var.ind <- rep(c("v","y+","y-","y0"), c(n.rxns, n.act, n.act.rev, n.inact)) # iMAT variable type indicators (v: fluxex; y+/-/0: indicator variables)
+
+  # iMAT model
+  imat.model <- list(exprs.int=expr, fluxes.int=rxns.int,
+                    rxns.act=rxns.act, rxns.act.rev=rxns.act.rev, rxns.inact=rxns.inact, rxns.inact.rev=rxns.inact.rev, var.ind=var.ind,
+                    rxns=model$rxns, mets=model$mets, csense="max", c=c, S=S, rowlb=rowlb, rowub=rowub, lb=lb, ub=ub, vtype=vtype)
+  if ("irxn.ids" %in% names(model)) imat.model$irxn.ids <- model$irxn.ids # for multicellular imat models, keep the irxns.ids variable (intracellular reactions indices)
+  imat.model
+}
 
 form.imat.dflux.mc <- function(model, dflux, imat.pars=list()) {
   # formulate the differential flux part of iMATs among cells for a multicellular model (two or three cells)
