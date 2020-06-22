@@ -242,6 +242,11 @@ imat.mc <- function(model, expr, expr.adj, cell.fracs, imat.pars=list(), solv.pa
   # set samp.pars to NULL to skip the sampling
   # return both the imat.model, and the result model (the updated metabolic model), in a list(imat.model, result.model)
 
+  cells <- model$rxn.cell.ids
+  ncells <- uniqueN(cells[cells!="e"])
+  if (length(cell.fracs)!=ncells) stop("length of cell.fracs not equal to the number of cells in the model.")
+  cell.fracs <- cell.fracs/sum(cell.fracs)
+
   # formulate iMAT model
   imat.model <- form.imat.mc(model, expr, expr.adj, cell.fracs, imat.pars)
 
@@ -249,7 +254,7 @@ imat.mc <- function(model, expr, expr.adj, cell.fracs, imat.pars=list(), solv.pa
   imat.model <- run.imat(imat.model, imat.pars, solv.pars)
 
   # update the original metabolic model based on iMAT result
-  res.model <- update.model.imat(model, imat.model, imat.pars)
+  res.model <- update.model.imat.mc(model, imat.model, cell.fracs, imat.pars)
 
   if (!is.null(samp.pars)) {
     # sample the result model
@@ -309,10 +314,8 @@ form.imat.mc <- function(model, expr, expr.adj, cell.fracs, imat.pars) {
   rxns.int[model$lb==0 & model$ub==0] <- 0
 
   # get the cell info for the rxns
-  cells <- stringr::str_match(model$rxns, "cell[0-9]+$")
-  tmp <- unique(cells[!is.na(cells)])
-  if (length(cell.fracs)!=length(tmp)) stop("length of cell.fracs not equal to the number of cells in the model.")
-  cell.fracs <- cell.fracs/sum(cell.fracs)
+  cells <- model$rxn.cell.ids
+  tmp <- unique(cells[cells!="e"])
   cells <- lapply(tmp, function(x) which(cells==x))
   # a function to adjust flux.act or flux.inact values for the cells based on their fractions
   tmpf <- function(id, v=pars$flux.act) {
@@ -486,4 +489,35 @@ run.imat.mc <- function(imat.model, imat.pars, solv.pars) {
   list(imat.model=imat.model, result.model=res.model)
 }
 
+update.model.imat.mc <- function(model, imat.res, cell.fracs, imat.pars) {
+  # update metabolic model (model) based on the result of iMAT (imat.res), using parameters given in imat.pars
+  # return the updated model
+  pars <- get.pars("imat", imat.pars)
+
+  if (pars$mode==2) {
+    tmp <- !is.na(imat.res$solver.out$vmin)
+    model$lb[tmp] <- imat.res$solver.out$vmin[tmp]
+    tmp <- !is.na(imat.res$solver.out$vmax)
+    model$ub[tmp] <- imat.res$solver.out$vmax[tmp]
+  } else {
+    # get the cell info for the rxns
+    cells <- model$rxn.cell.ids
+    tmp <- unique(cells[cells!="e"])
+    cells <- lapply(tmp, function(x) which(cells==x))
+    # a function to adjust flux.act or flux.inact values for the cells based on their fractions
+    tmpf <- function(id, v=pars$flux.act) {
+      res <- rep(v, length(id))
+      for (i in 1:length(cells)) {
+        res[id %in% cells[[i]]] <- v*cell.fracs[i]
+      }
+      res
+    }
+    fint <- imat.res$fluxes.int.imat
+    model$lb[fint==1] <- tmpf(which(fint==1))
+    model$ub[fint==-1] <- -tmpf(which(fint==-1))
+    model$ub[fint==0] <- tmpf(which(fint==0), pars$flux.inact)
+    model$lb[fint==0 & model$lb<0] <- -tmpf(which(fint==0 & model$lb<0), pars$flux.inact)
+  }
+  model
+}
 

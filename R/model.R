@@ -133,11 +133,15 @@ make.conjunct.model <- function(model, n=2) {
   tmp <- !fields %in% names(model)
   if (any(tmp)) stop("These necessary items are missing in the model: ", paste0(fields[tmp], collapse=", "), ".")
 
+  res <- model
+
   # mets in the extracellular space (emet.ids)
   tmp <- grepl("\\[e\\]$|_e$", model$mets)
   emet.ids <- which(tmp)
   # and the rest (i.e. intracellular)
   imet.ids <- which(!tmp)
+  # cell compartment info of mets
+  res$met.cell.ids <- ifelse(tmp, "e", "cell1") # base model as cell 1
   # save the original rowlb, rowub and b for emet.ids
   em.rowlb <- model$rowlb[emet.ids]
   em.rowub <- model$rowub[emet.ids]
@@ -148,8 +152,10 @@ make.conjunct.model <- function(model, n=2) {
   erxn.ids <- which(tmp)
   # and the rest
   not.erxn.ids <- which(!tmp)
+  # cell compartment info of mets
+  res$rxn.cell.ids <- ifelse(tmp, "e", "cell1") # base model as cell 1
 
-  res <- model
+  # add these info too
   res$imet.ids <- imet.ids
   res$emet.ids <- emet.ids
   res$irxn.ids <- not.erxn.ids
@@ -204,6 +210,9 @@ make.conjunct.model <- function(model, n=2) {
     res$rowlb[emet.ids] <<- res$rowlb[emet.ids] + em.rowlb
     res$rowub[emet.ids] <<- res$rowub[emet.ids] + em.rowub
     if ("b" %in% names(model)) res$b[emet.ids] <<- res$b[emet.ids] + em.b
+    # cell compartment info
+    res$rxn.cell.ids <<- c(res$rxn.cell.ids, rep(paste0("cell",i), length(not.erxn.ids)))
+    res$met.cell.ids <<- c(res$met.cell.ids, rep(paste0("cell",i), length(imet.ids)))
 
     # 2. S matrix
     # the order of reactions is as above; for the (a) part, the matrix is just the original S unchanged but added more rows of zeros for the intracellular metabolites of the second cell; for the (b) part, the matrix is based on the not.erxn.ids columns of the original S matrix just with the rows corresponding to imet.ids "cut and pasted" to bottom
@@ -247,9 +256,10 @@ set.cell.fractions <- function(model.sc, model.mc, cell.fracs, nc=1L) {
   # cell.fracs: a vector of cell fractions corresponding to the cells in model.mc (in the order of cell1, cell2, etc.)
 
   # bounds of reactions that are not exclusively extracellular
-  bnds <- fva(model.sc, model.mc$irxn.ids, nc=nc)
+  bnds <- fva(model.sc, which(model.mc$rxn.cell.ids=="cell1"), nc=nc)
   res <- model.mc
-  ncells <- uniqueN(stringr::str_match(model.mc$genes, "cell[0-9]+$"))
+  cells <- model.mc$rxn.cell.ids
+  ncells <- uniqueN(cells[cells!="e"])
   if (length(cell.fracs)!=ncells) stop("length of cell.fracs not equal to the number of cells in the model.")
   cell.fracs <- cell.fracs/sum(cell.fracs)
   for (i in 1:length(cell.fracs)) {
