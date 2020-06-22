@@ -310,7 +310,7 @@ form.imat.mc <- function(model, expr, expr.adj, cell.fracs, imat.pars) {
 
   # get the cell info for the rxns
   cells <- stringr::str_match(model$rxns, "cell[0-9]+$")
-  tmp <- unique(cells[!is.na(cell)])
+  tmp <- unique(cells[!is.na(cells)])
   if (length(cell.fracs)!=length(tmp)) stop("length of cell.fracs not equal to the number of cells in the model.")
   cell.fracs <- cell.fracs/sum(cell.fracs)
   cells <- lapply(tmp, function(x) which(cells==x))
