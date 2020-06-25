@@ -8,13 +8,14 @@ minimize.dflux <- function(model, flux0, solv.pars=list()) {
   solve.model(model, csense="min", c=-2*flux0, Q=.sparseDiagonal(ncol(model$S), x=2), pars=solv.pars) # need to use .sparseDiagonal() instead of Diagonal() since Rcplex requires Q to be of the class dsparseMatrix
 }
 
-moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", biomass.rgx="biomass", solv.pars=list()) {
+moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", biomass.rgx="biomass", xopt=FALSE, solv.pars=list()) {
   # run moma, the original formulation: first obtain a reference flux0 corresponding to the maximum biomass in the wildtype model (or provide a specific flux0); then minimize the euclidian distance to flux0 in the KO model and obtain the resulting biomass (or other objective value)
   # flux0: should either be "biomass" (then take the first solution of maximizing biomass as flux0), or "max.c" or "min.c" (then will maximize/minimize model$c to obtain flux0), or a vector for the actual flux0
   # obj: should either be "biomass" (then will get the biomass value as the reault) or "c" (then will get the model$c value) or a function (then will use this function on the output of solve.model() to get the result; the return of this function should be a 1-row data.table)
   # rxns are the indices or IDs or rxns to run moma on, by default all rxns; or a list, each element containing multiple reactions to KO at the same time
   # nc: number of cores
   # biomass.rgx is the regex used to find the biomass rxn
+  # xopt: whether to include xopt in the result
 
   if (length(flux0)==1 && is.character(flux0)) {
     if (flux0=="biomass") {
@@ -35,9 +36,13 @@ moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", bioma
       obj <- function(x) data.table(obj=x[[1]]$xopt[bm.idx])
     } else if (obj=="c") obj <- function(x) data.table(obj=sum(x[[1]]$xopt*model$c))
   } else if (!is.function(obj)) stop("Invalid value for the obj argument.")
-  moma0 <- function(model, flux0, obj, pars) obj(minimize.dflux(model, flux0, pars))
+  
+  moma0 <- function(model, flux0, obj, pars, xopt) {
+    tmp <- minimize.dflux(model, flux0, pars)
+    if (xopt) cbind(obj(tmp), data.table(xopt=list(tmp[[1]]$xopt))) else obj(tmp)
+  }
 
-  run.ko.screen(model, rxns, moma0, flux0=flux0, obj=obj, pars=solv.pars, nc=nc, simplify=TRUE)
+  run.ko.screen(model, rxns, moma0, flux0=flux0, obj=obj, pars=solv.pars, xopt=xopt, nc=nc, simplify=TRUE)
 }
 
 moma2 <- function(model, rxns="all", nc=1L, obj0=c("biomass","max.c","min.c"), obj="biomass", biomass.rgx="biomass", solv.pars=list()) {
@@ -71,9 +76,10 @@ moma2 <- function(model, rxns="all", nc=1L, obj0=c("biomass","max.c","min.c"), o
     } else stop("Invalid value for the obj argument.")
   } else if (!is.function(obj)) stop("Invalid value for the obj argument.")
   moma0 <- function(model, obj, pars) {
+    pars <- get.pars("qp", pars)
     c <- rep(0, ncol(model$S))
     tmp <- .sparseDiagonal(ncol(model$S)/2, x=2) # need to use .sparseDiagonal() instead of Diagonal() since Rcplex requires Q to be of the class dsparseMatrix
-    Q <- rbind(cbind(tmp, -tmp), cbind(-tmp, tmp))
+    Q <- rbind(cbind(tmp, -1*tmp), cbind(-1*tmp, tmp)) # needs -1*tmp, -tmp doesn't work for the class somehow
     obj(solve.model(model, csense="min", c=c, Q=Q, pars=pars))
   }
 
