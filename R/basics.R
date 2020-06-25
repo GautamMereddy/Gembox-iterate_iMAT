@@ -195,7 +195,7 @@ genes2rxns <- function(model, genes, mode=c(0,1), out=c("idx","rxns","rxnNames")
     res <- lapply(gind, function(gi) {
       tmp <- rep(0, length(model$genes))
       tmp[gi] <- -1
-      which(exprs2fluxes(model, tmp)==-1)
+      suppressMessages(which(exprs2fluxes(model, tmp)==-1))
     })
   }
 
