@@ -75,12 +75,17 @@ fva <- function(model, rxns="all", nc=1L, biomass=NULL, biomass.rgx="biomass", s
 run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) {
   # a wrapper function to run algorithm `f` under the original wildtype model as well as models where each rxn in rxns is knocked out (i.e. both lb and ub set to 0)
   # model is the formulated model for running the algorithm `f`; it should be derived from the original metabolic model by adding columns and rows to the S matrix, such that indices of the rxns and mets do not change
-  # rxns are the indices or IDs or rxns to include in the KO screen, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
+  # rxns are the indices or IDs or rxns to include in the KO screen, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl; or a list, each element containing multiple reactions to KO at the same time
   # ... are further parameters passed to f()
   # nc: the number of cores for running across rxns
   # simplify: if FALSE, return a list from mclapply across rxns; if TRUE, then assume the run for each rxn yields a summary data.table, and will try to combine them with rbindlist
 
-  if (length(rxns)==1 && rxns=="all+ctrl") {
+  if (is.list(rxns)) {
+    if (is.null(names(rxns))) names(rxns) <- 1:length(rxns)
+    rxns <- lapply(rxns, function(x) {
+      if (length(x==1) && x=="ctrl") 0 else all2idx(model, x)
+    })
+  } else if (length(rxns)==1 && rxns=="all+ctrl") {
     rxns <- 0:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
     names(rxns) <- c("ctrl", model$rxns)
   } else if (length(rxns)==1 && rxns=="all") {
@@ -107,8 +112,8 @@ run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) 
     a <- match(i,pb)
     if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
     m <- model
-    m$lb[rxns[i]] <- 0 # if rxns[i]==0, lb will not be changed (i.e. the control)
-    m$ub[rxns[i]] <- 0 # if rxns[i]==0, ub will not be changed (i.e. the control)
+    m$lb[rxns[[i]]] <- 0 # if rxns[[i]]==0, lb will not be changed (i.e. the control)
+    m$ub[rxns[[i]]] <- 0 # if rxns[[i]]==0, ub will not be changed (i.e. the control)
     f(m, ...)
   }, mc.cores=nc)
   message("100%\nDone KO screen.")

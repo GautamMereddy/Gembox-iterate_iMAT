@@ -12,7 +12,8 @@ moma <- function(model, rxns="all", nc=1L, flux0="biomass", obj="biomass", bioma
   # run moma, the original formulation: first obtain a reference flux0 corresponding to the maximum biomass in the wildtype model (or provide a specific flux0); then minimize the euclidian distance to flux0 in the KO model and obtain the resulting biomass (or other objective value)
   # flux0: should either be "biomass" (then take the first solution of maximizing biomass as flux0), or "max.c" or "min.c" (then will maximize/minimize model$c to obtain flux0), or a vector for the actual flux0
   # obj: should either be "biomass" (then will get the biomass value as the reault) or "c" (then will get the model$c value) or a function (then will use this function on the output of solve.model() to get the result; the return of this function should be a 1-row data.table)
-  # rxns are the indices or IDs or rxns to run moma on, by default all rxns; nc: number of cores
+  # rxns are the indices or IDs or rxns to run moma on, by default all rxns; or a list, each element containing multiple reactions to KO at the same time
+  # nc: number of cores
   # biomass.rgx is the regex used to find the biomass rxn
 
   if (length(flux0)==1 && is.character(flux0)) {
@@ -43,7 +44,8 @@ moma2 <- function(model, rxns="all", nc=1L, obj0=c("biomass","max.c","min.c"), o
   # run moma (the alternative formulation: first obtain the maximum biomass or other objective in the wildtype model; then model the wildtype and KO as a single model, minimize the euclidian distance between flux_wt and flux_ko while fixing the biomass/other objective of the wildtype at the optimal value; finally obtain the resulting biomass/other objective of KO)
   # obj0: the objective for the wildtype model; either "default" (biomass) or "max.c"/"min.c" (maximize/minimize model$c)
   # obj: should either be "biomass" (then will get the biomass value as the reault) or "c" (then will get the model$c value) or a function (then will use this function on the output of solve.model() to get the result; the return of this function should be a 1-row data.table)
-  # rxns are the indices or IDs or rxns to run moma on, by default all rxns; nc: number of cores
+  # rxns are the indices or IDs or rxns to run moma on, by default all rxns; or a list, each element containing multiple reactions to KO at the same time
+  # nc: number of cores
   # biomass.rgx: the regex used to find the biomass rxn
 
   bm.idx <- get.biomass.idx(model, biomass.rgx)
@@ -59,7 +61,7 @@ moma2 <- function(model, rxns="all", nc=1L, obj0=c("biomass","max.c","min.c"), o
   }
   # create a combined model with the optimal-biomass-constrained wildtype model placed in the second place
   model.comb <- c.model(model, model.wt)
-  model.comb$rxns[1:length(model$rxns)] <- str_sub(model.comb$rxns[1:length(model$rxns)], 1, -3)
+  model.comb$rxns[1:length(model$rxns)] <- stringr::str_sub(model.comb$rxns[1:length(model$rxns)], 1, -3)
 
   if (length(obj)==1 && is.character(obj)) {
     if (obj=="biomass") {
