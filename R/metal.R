@@ -264,5 +264,22 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=
   list(metal.model=metal.model, result.metal=res1, result.moma=res.moma, result.rmetal=res)
 }
 
+mta.moma <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
+  # the function for running mta based solely on moma
+  # flux0 is the reference flux vector from sampling an iMAT output model
+  # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
+  # rxns are the indices or IDs or rxns to run metal on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
+  # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
+  # nc: number of cores to use for rxns
+  # detail: whether to return more details or only the MTA scores
+  # return both the metal.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result)
 
+  # formulate metal model; should not make any big difference if I used form.mta()
+  metal.model <- form.metal(model, flux0, dflux)
 
+  # run MOMA
+  tmpf <- function(x) get.metal.score(model=metal.model, x, detail=detail)
+  res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=solv.pars)
+
+  list(metal.model=metal.model, result=res.moma)
+}
