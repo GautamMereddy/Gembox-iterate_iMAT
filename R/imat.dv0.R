@@ -108,7 +108,7 @@ form.imat.dv0 <- function(model, v0, df, w, imat.pars) {
     model$var.ind <- c(model$var.ind, rep(c("z+","z-","z+1","z0"), c(n.act, n.act.rev, n.inact, n.rxns0))) # iMAT variable type indicators (v: fluxex; z+/-/0: indicator variables)
   } else {
     model$c <- rep(c(0, w[1]/sum(df!=0,na.rm=TRUE), w[2]/sum(df==0,na.rm=TRUE)), c(n.rxns, n-n.rxns0, n.rxns0))
-    model$vtype <- ifelse(c==0, "C", "I")
+    model$vtype <- ifelse(model$c==0, "C", "I")
     model$var.ind <- rep(c("v","z+","z-","z+1","z0"), c(n.rxns, n.act, n.act.rev, n.inact, n.rxns0)) # iMAT variable type indicators (v: fluxex; z+/-/0: indicator variables)
     model$csense="max"
   }
