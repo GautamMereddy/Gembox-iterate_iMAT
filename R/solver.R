@@ -27,8 +27,6 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
       nsol <- pars$nsol
       pars$nsol <- NULL
     } else nsol <- 1
-    res <- Rcplex2::Rcplex(c, A, b, Q, lb, ub, x0, pars, csense, sense, vtype, nsol)
-    if (!is.null(names(res))) res <- list(res)
 
     tmpf <- function(x) {
       res <- list(stat=.pkg.const$cpx.stat.code[as.character(x$status)], obj=x$obj, xopt=x$xopt)
@@ -39,8 +37,17 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
       }
       res
     }
-    res <- lapply(res, tmpf)
-    if (!res[[1]]$stat %in% .pkg.const$ok.stat) warning("Potential issue, solver status: ", res[[1]]$stat, ".")
+
+    res <- tryCatch({
+      res <- Rcplex2::Rcplex(c, A, b, Q, lb, ub, x0, pars, csense, sense, vtype, nsol)
+      if (!is.null(names(res))) res <- list(res)
+      res <- lapply(res, tmpf)
+      if (!res[[1]]$stat %in% .pkg.const$ok.stat) warning("Potential issue, solver status: ", res[[1]]$stat, ".")
+      res
+    }, error=function(e) {
+      warning("In solve.model(): Error while trying to solve model (see info below), NA returned.\n", e)
+      res <- list(list(stat=NA, obj=NA, xopt=NA))
+    })
 
   } else if (.pkg.var$solver=="gurobi") {
 
@@ -48,12 +55,18 @@ solve.model <- function(model, ..., x0=NULL, pars=list()) {
     if (!is.null(x0)) {
       if (any(vtype!="C")) m$start <- x0 else m$pstart <- x0
     }
-    res <- gurobi::gurobi(m, pars)
 
-    if (!res$status %in% .pkg.const$ok.stat) warning("Potential issue, solver status: ", res$status, ".")
-    if ("pool" %in% names(res)) {
-      res <- lapply(res$pool, function(x) list(stat=res$status, obj=x$objval, xopt=x$x))
-    } else res <- list(stat=res$status, obj=res$objval, xopt=res$x)
+    res <- tryCatch({
+      res <- gurobi::gurobi(m, pars)
+      if (!res$status %in% .pkg.const$ok.stat) warning("Potential issue, solver status: ", res$status, ".")
+      if ("pool" %in% names(res)) {
+        res <- lapply(res$pool, function(x) list(stat=res$status, obj=x$objval, xopt=x$x))
+      } else res <- list(list(stat=res$status, obj=res$objval, xopt=res$x))
+      res
+    }, error=function(e) {
+      warning("In solve.model(): Error while trying to solve model (see info below), NA returned.\n", e)
+      res <- list(list(stat=NA, obj=NA, xopt=NA))
+    })
 
   }
 
