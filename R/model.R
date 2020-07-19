@@ -44,24 +44,37 @@ read.matlab.model <- function(fn) {
   #model$genes <- ifelse(is.na(mapp$SYMBOL), model$gene.ids, mapp$SYMBOL)
 
   # rules mapping genes to reactions
-  rules <- sapply(model$grRules, function(x) {
-    if (is.na(x)) {
-      x <- "0"
+  if ("grRules" %in% names(model) && !"rules" %in% names(model)) {
+    rules <- sapply(model$grRules, function(x) {
+      if (is.na(x)) {
+        x <- "0"
+      } else {
+        x <- stringr::str_replace_all(x, "[0-9]+_AT[0-9]+", function(x) paste0("x[", match(x, model$gene.ids), "]"))
+        x <- stringr::str_replace_all(x, "and", "&")
+        x <- stringr::str_replace_all(x, "or", "\\|")
+      }
+      x
+    })
+    model$rules <- unname(rules)
+  }
+
+  if (!"rowlb" %in% names(model) && !"rowub" %in% names(model)) {
+    if ("b" %in% names(model)) {
+      model$rowlb <- model$b
+      model$rowub <- model$b
     } else {
-      x <- str_replace_all(x, "[0-9]+_AT[0-9]+", function(x) paste0("x[", match(x, model$gene.ids), "]"))
-      x <- str_replace_all(x, "and", "&")
-      x <- str_replace_all(x, "or", "\\|")
+      model$rowlb <- rep(0, nrow(model$S))
+      model$rowub <- rep(0, nrow(model$S))
     }
-    x
-  })
-  model$rules <- unname(rules)
-  model$rowlb <- ifelse("b" %in% names(model), model$b, rep(0, nrow(model$S)))
-  model$rowub <- ifelse("b" %in% names(model), model$b, rep(0, nrow(model$S)))
+  }
+
   model$S <- Matrix(model$S, sparse=TRUE)
 
   # check for necessary fields
   tmp <- !fields %in% names(model)
-  if (any(tmp)) stop("Error creating model, these are missing in the result: ", paste0(fields[tmp], collapse=", "), ".")
+  if (any(tmp)) warning("Failed to create these fields in the model, please fix manually: ", paste0(fields[tmp], collapse=", "), ".")
+  message("Please double-check whether the essential fields in the model have the correct format.")
+
   model
 }
 
@@ -116,7 +129,9 @@ read.sbml.model <- function(fn) {
 
   # check for necessary fields
   tmp <- !fields %in% names(model)
-  if (any(tmp)) stop("Error creating model, these are missing in the result: ", paste0(fields[tmp], collapse=", "), ".")
+  if (any(tmp)) warning("Failed to create these fields in the model, please fix manually: ", paste0(fields[tmp], collapse=", "), ".")
+  message("Please double-check whether the essential fields in the model have the correct format.")
+
   model
 }
 
