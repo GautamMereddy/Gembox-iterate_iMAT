@@ -58,6 +58,8 @@ read.matlab.model <- function(fn) {
     model$rules <- unname(rules)
   }
 
+  if ("rules" %in% names(model)) model$rules <- stringr::str_replace_all(model$rules, "x\\([0-9]+\\)", function(x) paste0("x[",stringr::str_sub(x,3,-2),"]"))
+
   if (!"rowlb" %in% names(model) && !"rowub" %in% names(model)) {
     if ("b" %in% names(model)) {
       model$rowlb <- model$b
