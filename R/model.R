@@ -50,14 +50,15 @@ read.matlab.model <- function(fn) {
   }
 
   if ("grRules" %in% names(model) && !"rules" %in% names(model)) {
-    gns <- paste(stringr::str_replace_all(model$gene.ids, "(\\W)", "\\\\\\1"), collapse="|")
+    #gns.rgx <- paste(stringr::str_replace_all(model$gene.ids, "(\\W)", "\\\\\\1"), collapse="|") # this has a potential issue, e.g. "A|A1" will match only A and not A1
+    gns.rgx <- "[A-Za-z0-9_.]+"
     rules <- sapply(model$grRules, function(x) {
       if (is.na(x)) {
         x <- "0"
       } else {
-        x <- stringr::str_replace_all(x, gns, function(x) paste0("x[", match(x, model$gene.ids), "]"))
-        x <- stringr::str_replace_all(x, "and", "&")
-        x <- stringr::str_replace_all(x, "or", "\\|")
+        x <- stringr::str_replace_all(x, " and ", " & ")
+        x <- stringr::str_replace_all(x, " or ", " \\| ")
+        x <- stringr::str_replace_all(x, gns.rgx, function(x) paste0("x[", match(x, model$gene.ids), "]"))
       }
       x
     })
