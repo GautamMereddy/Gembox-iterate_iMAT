@@ -44,23 +44,24 @@ read.matlab.model <- function(fn) {
   #model$genes <- ifelse(is.na(mapp$SYMBOL), model$gene.ids, mapp$SYMBOL)
 
   # rules mapping genes to reactions
+  if ("rules" %in% names(model)) {
+    model$rules <- stringr::str_replace_all(model$rules, "x\\([0-9]+\\)", function(x) paste0("x[",stringr::str_sub(x,3,-2),"]"))
+    model$rules[is.na(model$rules)] <- "0"
+  }
+
   if ("grRules" %in% names(model) && !"rules" %in% names(model)) {
+    gns <- paste(stringr::str_replace_all(model$gene.ids, "(\\W)", "\\\\\\1"), collapse="|")
     rules <- sapply(model$grRules, function(x) {
       if (is.na(x)) {
         x <- "0"
       } else {
-        x <- stringr::str_replace_all(x, "[0-9]+_AT[0-9]+", function(x) paste0("x[", match(x, model$gene.ids), "]"))
+        x <- stringr::str_replace_all(x, gns, function(x) paste0("x[", match(x, model$gene.ids), "]"))
         x <- stringr::str_replace_all(x, "and", "&")
         x <- stringr::str_replace_all(x, "or", "\\|")
       }
       x
     })
     model$rules <- unname(rules)
-  }
-
-  if ("rules" %in% names(model)) {
-    model$rules <- stringr::str_replace_all(model$rules, "x\\([0-9]+\\)", function(x) paste0("x[",stringr::str_sub(x,3,-2),"]"))
-    model$rules[is.na(model$rules)] <- "0"
   }
 
   if (!"rowlb" %in% names(model) && !"rowub" %in% names(model)) {
