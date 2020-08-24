@@ -419,12 +419,12 @@ add.rxn <- function(model, rxn, mets, coefs, lb, ub, rule="0", rxnName=rxn, subS
   x <- rep(0, nrow(model$S))
   x[match(mets, model$mets)] <- coefs
   model$S <- cbind(model$S, x)
-  if (rules!="0") {
-    gns <- stringr::str_extract_all(rules, "[^()&| ]+")[[1]]
+  if (rule!="0") {
+    gns <- stringr::str_extract_all(rule, "[^()&| ]+")[[1]]
     model$genes <- c(model$genes, gns[!gns %in% model$genes])
-    rules <- stringr::str_replace_all(rules, "[^()&| ]+", function(x) paste0("x[",match(x,model$genes),"]"))
+    rule <- stringr::str_replace_all(rule, "[^()&| ]+", function(x) paste0("x[",match(x,model$genes),"]"))
   }
-  model$rules <- c(model$rules, rules)
+  model$rules <- c(model$rules, rule)
   model
 }
 
