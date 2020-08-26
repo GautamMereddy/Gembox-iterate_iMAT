@@ -176,7 +176,9 @@ rxns2genes <- function(model, x) {
 
   idx <- all2idx(model, x)
   idx[idx==0] <- NA # NA will be returned where x is 0
-  lapply(stringr::str_extract_all(model$rules[idx], "[1-9][0-9]*"), function(x) unique(model$genes[as.numeric(x)]))
+  res <- lapply(stringr::str_extract_all(model$rules[idx], "[1-9][0-9]*"), function(x) unique(model$genes[as.numeric(x)]))
+  names(res) <- x
+  res
 }
 
 genes2rxns <- function(model, genes, mode=c(0,1), out=c("idx","rxns","rxnNames")) {
@@ -189,9 +191,11 @@ genes2rxns <- function(model, genes, mode=c(0,1), out=c("idx","rxns","rxnNames")
 
   if (mode=="0") {
     r2g <- rxns2genes(model, 1:length(model$rules))
+    names(genes) <- genes
     res <- lapply(genes, function(gi) which(sapply(r2g, function(gns) gi %in% gns)))
   } else if (mode=="1") {
     gind <- match(genes, model$genes)
+    names(gind) <- genes
     res <- lapply(gind, function(gi) {
       tmp <- rep(0, length(model$genes))
       tmp[gi] <- -1
@@ -279,13 +283,15 @@ get.rxn.equations <- function(model, x, dir=1, use.names=FALSE) {
     suffix <- paste0("[",stringr::str_sub(suffix,1,1),"]")
     mets <- paste0(mets, suffix)
   } else mets <- model$mets
-  mapply(function(i, coef) {
+  res <- mapply(function(i, coef) {
     x <- model$S[,i]*sign(ifelse(coef==0, 1, coef))
     rs <- paste(trimws(paste(ifelse(x[x<0]==-1,"",-x[x<0]), mets[x<0])), collapse=" + ")
     ps <- paste(trimws(paste(ifelse(x[x>0]==1,"",x[x>0]), mets[x>0])), collapse=" + ")
     if (model$lb[i]>=0) arrow <- "-->" else arrow <- "<==>"
     paste(rs, arrow, ps)
   }, idx, dir, SIMPLIFY=TRUE)
+  names(res) <- x
+  res
 }
 
 subsystems2gsets <- function(model, by=c("rxn","met"), exclude.mets=NULL, exclude.mets.rgx="default", exclude.mets.degree=ncol(model$S), name="subSystems") {
