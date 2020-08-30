@@ -1,20 +1,20 @@
 ###### functions for visualization of metabolic models ######
 
 
-map.colors <- function(x, cols=c("purple2","blue2","grey90","orangered2","red2"), trim=FALSE, lims=NULL, mid=NULL) {
+map.colors <- function(x, cols=c("blue2","grey70","red2"), trim=FALSE, lims=NULL, mid=NULL) {
   # map a numeric vector x to colors (i.e. color-code for x)
   # cols: a vector of colors (i.e. a spectrum of arbitrary length), corresponding to low to high x values
-  # trim: whether to "remove" more extreme values in x; if not FALSE, can provide a numerical value, meaning that values outside of the range median(x) +/- trim*mad(x) will be set to the corresponding boundary values; if TRUE corresponding to trim=2
+  # trim: whether to "remove" more extreme values in x; if not FALSE, can provide a numerical value, meaning that values outside of the range mean(x) +/- trim*sd(x) will be set to the corresponding boundary values; if TRUE corresponding to trim=3
   # lims: vector of two, low and high values correspond to the two extreme colors, default to range(x), if smaller than range(x), x values outside of the range will be mapped to the two extreme colors
   # mid: value corresponding to the mid-point color in cols (if cols have an even number colors the mid-point color will be extrapolated); default (NULL) means not forcing the mid-point color to correspond to any particular value
   # return a vector of colors corresponding to x
 
-  if (isTRUE(trim)) trim <- 2
+  if (isTRUE(trim)) trim <- 3
   if (is.numeric(trim)) {
-    medx <- median(x)
-    madx <- mad(x)
-    lb <- medx - trim*madx
-    ub <- medx + trim*madx
+    meanx <- mean(x)
+    sdx <- sd(x)
+    lb <- meanx - trim*sdx
+    ub <- meanx + trim*sdx
     x[x<lb] <- lb
     x[x>ub] <- ub
   }
@@ -25,7 +25,7 @@ map.colors <- function(x, cols=c("purple2","blue2","grey90","orangered2","red2")
     if (lims[2]<max(x)) x[x>lims[2]] <- lims[2]
   }
 
-  mapc <- function(x, cols, lims=NULL) {
+  mapc <- function(x, cols, lims) {
     # helper function, map x to colors
     n <- uniqueN(x)
     if (n==1) {
@@ -33,13 +33,14 @@ map.colors <- function(x, cols=c("purple2","blue2","grey90","orangered2","red2")
         cols <- colorRampPalette(cols)(2*length(cols)+1)
         res <- rep(cols[(length(cols)+1)/2], length(x))
       } else {
-        cols <- colorRampPalette(cols)(100)
-        bins <- as.numeric(cut(c(x[1],lims), 100))[1]
-        res <- cols[bins, length(x)]
+        cols <- colorRampPalette(cols)(20)
+        bins <- as.numeric(cut(c(x[1],lims), 20))[1]
+        res <- rep(cols[bins], length(x))
       }
     } else {
       nco <- round(n*diff(lims)/diff(range(x)))
-      if (nco<100) ncol <- 100
+      if (nco<50) nco <- 50
+      if (nco>500) nco <- 500
       cols <- colorRampPalette(cols)(nco)
       bins <- as.numeric(cut(c(lims, x), nco))[-1:-2]
       res <- cols[bins]
@@ -72,7 +73,7 @@ map.colors <- function(x, cols=c("purple2","blue2","grey90","orangered2","red2")
 }
 
 
-plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", flux.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("purple2","blue2","grey90","orangered2","red2"), lwds=c(0.5,10), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama")) {
+plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", flux.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama")) {
   # generate an interactive network plot for a metabolic model, can also incorporate fluxes and dfluxes data
   # model: the base metabolic model
   # rxns: reactions to plot
@@ -106,7 +107,9 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
   rm.mets <- get.exclude.mets(model, mets=NULL, rgx=exclude.mets.rgx, degree=ncol(model$S))
   met.ids <- setdiff(met.ids, rm.mets)
   mets <- model$mets[met.ids]
-  met.ns <- model$metNames[met.ids]
+  tmp <- stringr::str_match(mets, "[\\[_](.)\\]?$")[,2]
+  tmp <- paste0("[",stringr::str_sub(tmp,1,1),"]")
+  met.ns <- paste0(model$metNames[met.ids], tmp)
   dup.mets <- get.exclude.mets(model, mets=NULL, rgx=dup.mets.rgx, degree=ncol(model$S))
   md.ids <- intersect(met.ids, dup.mets)
 
@@ -134,21 +137,20 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
 
   # colors and line widths
   if (!is.null(fluxes)) v <- abs(fluxes) else v <- NULL # save abs(fluxes) to another variable
-  dv <- dfluxes # copy dfluxes to another variable
-  if (!is.null(dv)) {
+  if (!is.null(dfluxes)) {
     if (!abs.dflux) {
-      if (is.null(v)) {
-        dirs[rv.rxns] <- sign(dv[rv.rxns])
-        dv[rv.rxns] <- abs(dv[rv.rxns])
+      if (is.null(fluxes)) {
+        dirs[rv.rxns] <- sign(dfluxes[rv.rxns])
+        dfluxes[rv.rxns] <- abs(dfluxes[rv.rxns])
       } else {
-        dv[rv.rxns] <- dv[rv.rxns] * sign(v[rv.rxns])
+        dfluxes[rv.rxns] <- dfluxes[rv.rxns] * sign(fluxes[rv.rxns])
       }
     }
-    cols <- map.colors(dv, cols=cols, trim=TRUE, mid=0)
-    if (is.null(v)) lwds <- rep(1, length(rxns)) else lwds <- maplw(v)
+    cols <- map.colors(dfluxes, cols=cols, trim=TRUE, mid=0)
+    if (is.null(fluxes)) lwds <- rep(8, length(rxns)) else lwds <- maplw(v,lwds)
   } else {
-    if (!is.null(v) && flux.aes %in% c("color","both")) cols <- map.colors(v, cols=cols, trim=TRUE, mid=0) else cols <- rep("#1A1A1A", length(rxns)) # grey10
-    if (!is.null(v) && flux.aes %in% c("width","both")) lwds <- maplw(v) else lwds <- rep(1, length(rxns))
+    if (!is.null(fluxes) && flux.aes %in% c("color","both")) cols <- map.colors(v, cols=cols, trim=TRUE, mid=0) else cols <- rep("#1A1A1A", length(rxns)) # grey10
+    if (!is.null(fluxes) && flux.aes %in% c("width","both")) lwds <- maplw(v,lwds) else if (!is.null(fluxes) && flux.aes=="color") lwds <- rep(8, length(rxns)) else lwds <- rep(2, length(rxns))
   }
 
   # network data for visualization
@@ -161,7 +163,7 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
     ps <- mets.i[x[mi]>0] # products
     # node (both mets and rxn) info
     nd <- data.table(id=c(mets.i, rxns[i]), label=c(mets[mi], rxns[i]),
-                     title=c(met.ns[mi], paste0("<p><b>",rxn.ns[i],"</b><br>",rxn.equs[i],"<br>v=",v[i],"<br>dv=",dv[i],"</p>")),
+                     title=c(met.ns[mi], sprintf("<p><b>%s</b><br>%s<br>v=%.4g<br>dv=%.4g</p>",rxn.ns[i],rxn.equs[i],ifelse(is.null(v[i]),NA,v[i]),ifelse(is.null(dfluxes[i]),NA,dfluxes[i]))),
                      group=c(rep("met", sum(mi)), "rxn"))
     # edge from reactants to reaction
     if (length(rs)!=0) {
