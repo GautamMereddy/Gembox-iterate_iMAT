@@ -7,6 +7,8 @@
 
 Rcpp::List achr(const Rcpp::List& model, const Rcpp::List& state, const arma::mat& warmupPnts, const int nPnts, const int stepsPerPnt) {
     
+    Rcpp::Rcout << "Prepare for ACHR sampling..." << std::endl;
+
     const double maxMinTol = 1e-09, uTol = 1e-09, dTol = 1e-14;
     arma::vec lb = Rcpp::as<arma::vec>(model["lb"]);
     arma::vec ub = Rcpp::as<arma::vec>(model["ub"]);
@@ -20,7 +22,8 @@ Rcpp::List achr(const Rcpp::List& model, const Rcpp::List& state, const arma::ma
     arma::vec prevPnt = Rcpp::as<arma::vec>(state["prev.pnt"]);
     unsigned int totalStepCount = Rcpp::as<Rcpp::IntegerVector>(state["n.tot.steps"])[0];
 
-    Rcpp::Rcout << "Begin ACHR sampling..." << std::endl;
+    Rcpp::Rcout << "Begin ACHR sampling, progress:" << std::endl;
+    Rcpp::Rcout << "0%...";
 
     arma::mat points(nRxns, nPnts);
     arma::vec curPnt;
@@ -91,11 +94,11 @@ Rcpp::List achr(const Rcpp::List& model, const Rcpp::List& state, const arma::ma
         pointCount = pointCount + 1;
         // print progress
         if (pointCount % (nPnts/10) == 0) {
-            Rcpp::Rcout << "Sampling progress: " << 100*pointCount/nPnts << "%" << std::endl;
+            Rcpp::Rcout << 100*pointCount/nPnts << "%";
         }
     }
 
-    Rcpp::Rcout << "Done ACHR sampling." << std::endl;
+    Rcpp::Rcout << std::endl << "Done ACHR sampling." << std::endl;
 
     Rcpp::List endStat = Rcpp::List::create(Rcpp::Named("center.pnt") = centerPnt,
                                             Rcpp::Named("prev.pnt") = prevPnt,
