@@ -94,7 +94,7 @@ Rcpp::List achr(const Rcpp::List& model, const Rcpp::List& state, const arma::ma
         pointCount = pointCount + 1;
         // print progress
         if (pointCount % (nPnts/10) == 0) {
-            Rcpp::Rcout << 100*pointCount/nPnts << "%";
+            Rcpp::Rcout << 100*pointCount/nPnts << "%...";
         }
     }
 
