@@ -95,13 +95,6 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
   flux.aes <- match.arg(flux.aes)
   layout <- match.arg(layout)
 
-  # rxns
-  rxn.ids <- all2idx(model, rxns)
-  rxns <- model$rxns[rxn.ids]
-  rxn.ns <- model$rxnNames[rxn.ids]
-  if (is.null(fluxes)) tmp <- 1 else tmp <- fluxes
-  rxn.equs <- get.rxn.equations(model, rxn.ids, dir=tmp, use.names=TRUE)
-
   # mets
   if (is.null(mets)) met.ids <- unique(unlist(rxns2mets(model, rxn.ids))) else met.ids <- all2idx(model, mets)
   rm.mets <- get.exclude.mets(model, mets=NULL, rgx=exclude.mets.rgx, degree=ncol(model$S))
@@ -113,6 +106,23 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
   dup.mets <- get.exclude.mets(model, mets=NULL, rgx=dup.mets.rgx, degree=ncol(model$S))
   md.ids <- intersect(met.ids, dup.mets)
 
+  # rxns
+  tmp <- unique(unlist(mets2rxns(model, met.ids)))
+  rxn.ids <- all2idx(model, rxns)
+  tmp <- rxn.ids %in% tmp
+  rxn.ids <- rxn.ids[tmp]
+  if (!is.null(fluxes)) {
+    fluxes <- fluxes[tmp]
+    fluxes[is.na(fluxes)] <- 0
+    rxn.equs <- get.rxn.equations(model, rxn.ids, dir=fluxes, use.names=TRUE)
+  } else rxn.equs <- get.rxn.equations(model, rxn.ids, use.names=TRUE)
+  if (!is.null(dfluxes)) {
+    dfluxes <- dfluxes[tmp]
+    dfluxes[is.na(dfluxes)] <- 0
+  }
+  rxns <- model$rxns[rxn.ids]
+  rxn.ns <- model$rxnNames[rxn.ids]
+  
   # helper function of mapping line widths
   maplw <- function(x, lwds) {
     medx <- median(x)
@@ -170,7 +180,7 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
       if (dirs[i]==1) ed <- data.table(from=rs, to=model$rxns[rxn.ids[i]], arrows="middle", smooth=TRUE, color=cols[i], width=lwds[i])
       if (dirs[i]==-1) ed <- data.table(from=model$rxns[rxn.ids[i]], to=rs, arrows="to", smooth=TRUE, color=cols[i], width=lwds[i])
       if (dirs[i]==0) ed <- data.table(from=rs, to=model$rxns[rxn.ids[i]], arrows="from;to", smooth=TRUE, color=cols[i], width=lwds[i])
-    }
+    } else ed <- NULL
     # edge from reaction to products
     if (length(ps)!=0) {
       if (dirs[i]==-1) ed <- rbind(ed, data.table(from=ps, to=model$rxns[rxn.ids[i]], arrows="middle", smooth=TRUE, color=cols[i], width=lwds[i]))

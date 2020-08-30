@@ -39,7 +39,7 @@ get.biomass.idx <- function(model, rgx="biomass") {
 }
 
 get.cmets <- function(model, cp, cell=NULL, out=c("idx","mets","metNames")) {
-  # get the metabolite indices or names (determined by out) in a specific compartment (cp, e.g. "e") and specific cell (cell, default NULL means any cell, or e.g. cell=1 means "_cell1")
+  # get the metabolite indices or names (determined by out) in a specific compartment (cp, e.g. "e" or "[ce]") and specific cell (cell, default NULL means any cell, or e.g. cell=1 means "_cell1")
   
   out <- match.arg(out)
   if (is.null(cell)) res <- grep(paste0(".*(\\[",cp,"\\]|_",cp,")(_cell[0-9]+|)$"), model$mets) else res <- grep(paste0(".*(\\[",cp,"\\]|_",cp,")_cell",cell,"$"), model$mets)
