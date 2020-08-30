@@ -73,27 +73,31 @@ map.colors <- function(x, cols=c("blue2","grey70","red2"), trim=FALSE, lims=NULL
 }
 
 
-plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", flux.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama")) {
+plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c("none","flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=NULL, width=NULL, height=NULL) {
   # generate an interactive network plot for a metabolic model, can also incorporate fluxes and dfluxes data
   # model: the base metabolic model
-  # rxns: reactions to plot
+  # rxns: reactions to plot; mets: metabolites to include in the plot; if provide rxns but not mets, default to mets in the rxns, vice versa
   # fluxes: the flux values corresponding to the reactions in rxns; if plotting this, the arrows of the reversible reactions will reflect the direction of fluxes, otherwise draw double arrows for reversible reactions
   # dfluxes: the values of flux changes corresponding to the reactions in rxns
-  # mets: metabolites to include in the plot, by default the mets in the rxns
   # exclude.mets.rgx: regex for names of metabolites (as in model$mets) to be excluded from the plots; the default regex works for some of the high-degree mets in recon1 and iMM1415
   # dup.mets.rgx: after keeping the mets in mets.ids and excluding those in exclude.mets.rgx, for the remaining mets, use dup.mets to specify regex of mets to be plot as separate nodes for each reaction, when they are recurrent in multiple reactions; the default is the same as exclude.mets, so these will be excluded; to duplicate these instead of removing them, set exclude.mets to NULL
-  # flux.aes: use line color, or line width, or both to represent fluxes if dfluxes is not given; dfluxes (if given) will always be plotted using color; if both fluxes and dfluxes are given, then will always use line width for flux and color for dflux
+  # use.aes: use line color, or line width, or both; for dfluxes, width can only represent magnitude; if both fluxes and dfluxes are given, then will always use line width for flux and color for dflux
   # abs.dflux: whether to treat dfluxes as change in absolute fluxes (i.e. magnitude of fluxes) or "raw" changes (i.e. dependent on the direction of reactions); if FALSE and also plotting fluxes, for reversible reactions the color will be adjusted accordingly, if FALSE and not plotting fluxes, the dfluxes of reversible reactions will always be plotted using the "positive" colors and the arrows of the reactions will correspond to the direction of change
   # cols: a vector of colors for negative -> positive values if plotting dfluxes; if plotting fluxes, the mid-point color and right-half of the colors will be used for low -> high fluxes
   # lwds: a vector of length 2, range of line widths
+  # label.value: whether to print the flux or dflux values in the visualization
   # layout: graph layout for visNetwork::visIgraphLayout
+  # seed: random seed for layout; default is not set (random)
+  # width and height: width and height of visualization
   
   if (!requireNamespace("visNetwork", quietly=TRUE)) {
     stop("Package \"visNetwork\" needed for this function to work.")
   }
 
-  flux.aes <- match.arg(flux.aes)
+  use.aes <- match.arg(use.aes)
+  label.value <- match.arg(label.value)
   layout <- match.arg(layout)
+  if (is.null(rxns) && is.null(mets)) stop("Need to provide rxns and/or mets.")
 
   # mets
   if (is.null(mets)) met.ids <- unique(unlist(rxns2mets(model, rxn.ids))) else met.ids <- all2idx(model, mets)
@@ -107,15 +111,28 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
   md.ids <- intersect(met.ids, dup.mets)
 
   # rxns
-  tmp <- unique(unlist(mets2rxns(model, met.ids)))
-  rxn.ids <- all2idx(model, rxns)
-  tmp <- rxn.ids %in% tmp
-  rxn.ids <- rxn.ids[tmp]
+  if (is.null(rxns)) {
+    rxn.ids <- unique(unlist(mets2rxns(model, met.ids)))
+    tmp <- rep(TRUE, length(rxn.ids))
+  } else {
+    rxn.ids <- all2idx(model, rxns)
+    tmp <- rxn.ids %in% unique(unlist(mets2rxns(model, met.ids)))
+    rxn.ids <- rxn.ids[tmp]
+  }
+  # directions of reactions for visualization
+  rv.rxns <- model$lb[rxn.ids]<0
+  dirs <- as.numeric(!rv.rxns)
+  # fluxes
   if (!is.null(fluxes)) {
     fluxes <- fluxes[tmp]
     fluxes[is.na(fluxes)] <- 0
+    dirs[fluxes<0] <- -1
+    v <- abs(fluxes)
     rxn.equs <- get.rxn.equations(model, rxn.ids, dir=fluxes, use.names=TRUE)
-  } else rxn.equs <- get.rxn.equations(model, rxn.ids, use.names=TRUE)
+  } else {
+    v <- NULL
+    rxn.equs <- get.rxn.equations(model, rxn.ids, use.names=TRUE)
+  }
   if (!is.null(dfluxes)) {
     dfluxes <- dfluxes[tmp]
     dfluxes[is.na(dfluxes)] <- 0
@@ -140,13 +157,7 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
     res
   }
 
-  # directions of reactions for visualization
-  rv.rxns <- model$lb[rxn.ids]<0
-  dirs <- as.numeric(!rv.rxns)
-  if (!is.null(fluxes)) dirs[fluxes<0] <- -1
-
   # colors and line widths
-  if (!is.null(fluxes)) v <- abs(fluxes) else v <- NULL # save abs(fluxes) to another variable
   if (!is.null(dfluxes)) {
     if (!abs.dflux) {
       if (is.null(fluxes)) {
@@ -156,11 +167,21 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
         dfluxes[rv.rxns] <- dfluxes[rv.rxns] * sign(fluxes[rv.rxns])
       }
     }
-    cols <- map.colors(dfluxes, cols=cols, trim=TRUE, mid=0)
-    if (is.null(fluxes)) lwds <- rep(8, length(rxns)) else lwds <- maplw(v,lwds)
+    if (!is.null(fluxes)) {
+      cols <- map.colors(dfluxes, cols=cols, trim=TRUE, mid=0)
+      lwds <- maplw(v, lwds)
+    } else {
+      if (use.aes %in% c("color","both")) cols <- map.colors(dfluxes, cols=cols, trim=TRUE, mid=0) else cols <- rep("#666666", length(rxns)) # grey40
+      if (use.aes %in% c("width","both")) lwds <- maplw(abs(dfluxes), lwds) else lwds <- rep(8, length(rxns))
+    }
   } else {
-    if (!is.null(fluxes) && flux.aes %in% c("color","both")) cols <- map.colors(v, cols=cols, trim=TRUE, mid=0) else cols <- rep("#1A1A1A", length(rxns)) # grey10
-    if (!is.null(fluxes) && flux.aes %in% c("width","both")) lwds <- maplw(v,lwds) else if (!is.null(fluxes) && flux.aes=="color") lwds <- rep(8, length(rxns)) else lwds <- rep(2, length(rxns))
+    if (!is.null(fluxes)) {
+      if (use.aes %in% c("color","both")) cols <- map.colors(v, cols=cols, trim=TRUE, mid=0) else cols <- rep("#666666", length(rxns)) # grey40
+      if (use.aes %in% c("width","both")) lwds <- maplw(v, lwds) else lwds <- rep(8, length(rxns))
+    } else {
+      cols <- rep("#1A1A1A", length(rxns)) # grey10
+      lwds <- rep(2, length(rxns))
+    }
   }
 
   # network data for visualization
@@ -187,6 +208,11 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
       if (dirs[i]==1) ed <- rbind(ed, data.table(from=model$rxns[rxn.ids[i]], to=ps, arrows="to", smooth=TRUE, color=cols[i], width=lwds[i]))
       if (dirs[i]==0) ed <- rbind(ed, data.table(from=model$rxns[rxn.ids[i]], to=ps, arrows="from;to", smooth=TRUE, color=cols[i], width=lwds[i]))
     }
+    # flux/dflux value label
+    if (label.value=="flux" && !is.null(fluxes) || label.value=="dflux" && !is.null(dfluxes)) {
+      lab <- switch(label.value, flux=sprintf("%.2g",v[i]), dflux=sprintf("%.2g",dfluxes[i]))
+      ed[1, c("label","font.color"):=list(lab, cols[i])]
+    }
     list(ed=ed, nd=nd)
   })
 
@@ -196,11 +222,12 @@ plot.model <- function(model, rxns, fluxes=NULL, dfluxes=NULL, mets=NULL, exclud
   nds <- unique(rbindlist(lapply(viz.dat, function(x) x$nd)))
   # draw network
   `%>%` <- visNetwork::`%>%`
-  vis <- visNetwork::visNetwork(nds, eds) %>%
-    visNetwork::visGroups(groupname="met", shape="dot", size=15, color=list(border="#1A1A1A", background="#4169E1"), borderWidth=1.5, font=list(size=22, color="#1A1A1A")) %>% # grey10; backgroun royalblue
-    visNetwork::visGroups(groupname="rxn", shape="text", font=list(size=26, color="darkblue")) %>%
+  vis <- visNetwork::visNetwork(nds, eds, width=width, height=height) %>%
+    visNetwork::visEdges(font=list(size=30)) %>%
+    visNetwork::visGroups(groupname="met", shape="dot", size=15, color=list(border="#1A1A1A", background="#4169E1"), borderWidth=1.5, font=list(size=30, color="#000000")) %>% # grey10; background royalblue
+    visNetwork::visGroups(groupname="rxn", shape="text", font=list(size=36, color="#000000")) %>%
     visNetwork::visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, collapse=TRUE)
-  if (layout!="") vis <- vis %>% visNetwork::visIgraphLayout(layout=layout)
+  if (layout=="") vis <- vis %>% visNetwork::visLayout(randomSeed=seed) else vis <- vis %>% visNetwork::visIgraphLayout(layout=layout, randomSeed=seed)
   vis
 }
 
