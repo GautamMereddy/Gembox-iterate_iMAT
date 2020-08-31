@@ -73,7 +73,7 @@ map.colors <- function(x, cols=c("blue2","grey70","red2"), trim=FALSE, lims=NULL
 }
 
 
-plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c("none","flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=NULL, width=NULL, height=NULL) {
+plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c(FALSE,TRUE,"flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=1, width=NULL, height=NULL) {
   # generate an interactive network plot for a metabolic model, can also incorporate fluxes and dfluxes data
   # model: the base metabolic model
   # rxns: reactions to plot; mets: metabolites to include in the plot; if provide rxns but not mets, default to mets in the rxns, vice versa
@@ -85,9 +85,9 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
   # abs.dflux: whether to treat dfluxes as change in absolute fluxes (i.e. magnitude of fluxes) or "raw" changes (i.e. dependent on the direction of reactions); if FALSE and also plotting fluxes, for reversible reactions the color will be adjusted accordingly, if FALSE and not plotting fluxes, the dfluxes of reversible reactions will always be plotted using the "positive" colors and the arrows of the reactions will correspond to the direction of change
   # cols: a vector of colors for negative -> positive values if plotting dfluxes; if plotting fluxes, the mid-point color and right-half of the colors will be used for low -> high fluxes
   # lwds: a vector of length 2, range of line widths
-  # label.value: whether to print the flux or dflux values in the visualization
+  # label.value: whether to print the flux or dflux values in the visualization; if TRUE, use whichever is available; if both are available, have to specify which
   # layout: graph layout for visNetwork::visIgraphLayout
-  # seed: random seed for layout; default is not set (random)
+  # seed: random seed for layout
   # width and height: width and height of visualization
   
   if (!requireNamespace("visNetwork", quietly=TRUE)) {
@@ -98,9 +98,10 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
   label.value <- match.arg(label.value)
   layout <- match.arg(layout)
   if (is.null(rxns) && is.null(mets)) stop("Need to provide rxns and/or mets.")
+  if (!is.null(fluxes) && !is.null(dfluxes) && label.value=="TRUE") stop("Need to specify label.value (either 'flux' or 'dflux').")
 
   # mets
-  if (is.null(mets)) met.ids <- unique(unlist(rxns2mets(model, rxn.ids))) else met.ids <- all2idx(model, mets)
+  if (is.null(mets)) met.ids <- unique(unlist(rxns2mets(model, rxns))) else met.ids <- all2idx(model, mets)
   rm.mets <- get.exclude.mets(model, mets=NULL, rgx=exclude.mets.rgx, degree=ncol(model$S))
   met.ids <- setdiff(met.ids, rm.mets)
   mets <- model$mets[met.ids]
@@ -129,6 +130,7 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
     dirs[fluxes<0] <- -1
     v <- abs(fluxes)
     rxn.equs <- get.rxn.equations(model, rxn.ids, dir=fluxes, use.names=TRUE)
+    if (label.value=="TRUE") label.value <- "flux"
   } else {
     v <- NULL
     rxn.equs <- get.rxn.equations(model, rxn.ids, use.names=TRUE)
@@ -136,6 +138,7 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
   if (!is.null(dfluxes)) {
     dfluxes <- dfluxes[tmp]
     dfluxes[is.na(dfluxes)] <- 0
+    if (label.value=="TRUE") label.value <- "dflux"
   }
   rxns <- model$rxns[rxn.ids]
   rxn.ns <- model$rxnNames[rxn.ids]
@@ -378,3 +381,105 @@ plot.model1 <- function(model, rxns, fluxes=rep(1, length(rxns)), dfluxes=rep(0,
   plot(my.graph)
   #return(my.graph)
 }
+
+
+plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control","Treated"), rxn.names=NULL, ylab="Reaction Rate", ylims=NULL, nr=1, use.fva=TRUE, nsamples=4e3) {
+  # plot flux distributions of two groups, given as group-specific models in model0 and model1
+  # if sample points are available in the models, plot flux distribution with violin plots; if no sample points are available, plot lb and ub and their middle point (like a forest plot)
+  # rxns and coefs: either vectors or lists (the latter is like get.diff.comb.flux); if more than one reaction, will plot in separate facets
+  # group.names: names of the two groups; rxn.names: names of rxns in order, if null will use rxn IDs or names(rxns) (if a list)
+  # ylab: y-axis title text; ylims: if not NULL, can be a vector c(ymin,ymax) or a list of such vectors corresponding to the order of rxns
+  # nr: number of rows if multiple facets
+  # use.fva: whether to use lb/ub values computed by FVA if sample points are available
+  # nsamples: number of samples to use from the end of samples
+  
+  if (!requireNamespace(c("ggplot2","RColorBrewer"), quietly=TRUE)) {
+    stop("Packages \"ggplot2\" and \"RColorBrewer\" needed for this function to work.")
+  }
+  
+  if (is.list(rxns)) {
+    rxns <- lapply(rxns, all2idx, model=model0)
+  } else {
+    rxns <- all2idx(model0, rxns)
+    names(rxns) <- model0$rxns[rxns]
+  }
+  if (is.null(rxn.names)) rxn.names <- names(rxns)
+  
+  s <- "sample" %in% names(model0) && "sample" %in% names(model1)
+  if (!s || (s && use.fva)) {
+    fva.res <- df.fva(model0, model1, rxns, coefs, nc=1L, df.cutoff=1e-6)
+    # if FVA result range is outside of ylims, shrink it to ylims (otherwise the FVA bound point is removed and the plot won't display correctly or won't reflect the correct range of data)
+    if (!is.null(ylims)) {
+      if (is.list(ylims)) {
+        ymins <- sapply(ylims, function(x) x[1])
+        ymaxs <- sapply(ylims, function(x) x[2])
+      } else {
+        ymins <- ylims[1]
+        ymaxs <- ylims[2]
+      }
+      fva.res[, c("lb0","lb1","ub0","ub1"):=list(ifelse(lb0>ymins,lb0,ymins), ifelse(lb1>ymins,lb1,ymins), ifelse(ub0<ymaxs,ub0,ymaxs), ifelse(ub1<ymaxs,ub1,ymaxs))]
+    }
+  }
+  if (s) {
+    tmpf <- function(m, i) {
+      ns <- ncol(m$sample$pnts)
+      if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
+      if (is.list(rxns)) {
+        x <- mapply(function(x,c) colSums(m$sample$pnts[x, (ns-nsamples+1):ns, drop=FALSE]*c), rxns, coefs)
+      } else {
+        x <- m$sample$pnts[rxns, (ns-nsamples+1):ns]
+        if (!is.vector(x)) x <- t(x)
+      }
+      if (is.vector(x)) {
+        if (use.fva) res <- data.table(grp=group.names[i+1], rxn=rxn.names, v=c(x, fva.res[[paste0("lb",i)]], fva.res[[paste0("ub",i)]])) else res <- data.table(grp=group.names[i+1], rxn=rxn.names, v=x)
+        res1 <- data.table(grp=group.names[i+1], rxn=rxn.names, v=mean(x, na.rm=TRUE))
+      } else {
+        if (use.fva) res <- data.table(grp=group.names[i+1], rxn=c(rep(rxn.names,each=nsamples), rep(rxn.names,2)), v=c(x, fva.res[[paste0("lb",i)]], fva.res[[paste0("ub",i)]])) else res <- data.table(grp=group.names[i+1], rxn=rep(rxn.names,each=nsamples), v=c(x))
+        res1 <- data.table(grp=group.names[i+1], rxn=rxn.names, v=colMeans(x, na.rm=TRUE))
+      }
+      list(res, res1)
+    }
+    tmp <- tmpf(model0,0)
+    tmp1 <- tmpf(model1,1)
+    dat <- rbind(tmp[[1]], tmp1[[1]])
+    dat1 <- rbind(tmp[[2]], tmp1[[2]])
+    dat1[, grp:=factor(grp, levels=group.names)]
+    dat1[, rxn:=factor(rxn, levels=rxn.names)]
+  } else dat <- data.table(grp=rep(group.names, each=length(rxn.names)), rxn=rxn.names, v=fva.res[,c(mean0,mean1)], lb=fva.res[,c(lb0,lb1)], ub=fva.res[,c(ub0,ub1)])
+  dat[, grp:=factor(grp, levels=group.names)]
+  dat[, rxn:=factor(rxn, levels=rxn.names)]
+
+  if (is.null(ylims)) {
+    if (s) blk <- dat[, .(vbnd=c(1.1*min(v)-0.1*max(v), 1.1*max(v)-0.1*min(v)), grp=grp[1]), by=rxn] else blk <- dat[, .(vbnd=c(1.1*min(lb)-0.1*max(ub), 1.1*max(ub)-0.1*min(lb)), grp=grp[1]), by=rxn] # grp is just place-holder
+  } else {
+    if (is.list(ylims)) {
+      names(ylims) <- rxn.names
+      blk <- rbindlist(lapply(ylims, function(x) data.table(grp=group.names, vbnd=x)), idcol="rxn") # grp is just place-holder
+    } else blk <- data.table(rxn=rep(rxn.names,each=2), vbnd=ylims, grp=group.names[1]) # grp is just place-holder
+  }
+  p <- ggplot(dat, aes(x=grp, y=v, color=grp, fill=grp)) + ylab(ylab) + geom_blank(data=blk, aes(y=vbnd))
+  # if sample points are available, plot flux distribution with violin plots; if no sample points are available, plot lb and ub and their middle point (like a forest plot)
+  if (s) {
+    p <- p + geom_violin(scale="width", width=0.6, color="grey20") + geom_point(data=dat1, aes(x=grp, y=v), size=1)
+  } else p <- p + geom_pointrange(aes(ymin=lb, ymax=ub), shape=21, fill="white")
+  if (length(rxn.names)>1) p <- p + facet_wrap(~rxn, scales="free_y", nrow=nr)
+  p <- p +
+    scale_color_brewer(palette="Set1") +
+    scale_fill_brewer(palette="Pastel1") +
+    theme_classic() +
+    theme(
+      axis.title.x=element_blank(),
+      axis.text.x=element_blank(),
+      axis.title.y=element_text(size=10),
+      axis.text.y=element_text(size=8),
+      strip.text.x=element_text(size=8),
+      legend.title=element_blank(),
+      legend.text=element_text(size=8),
+      legend.position="bottom",
+      legend.box.margin=margin(-8,0,0,0),
+      legend.key.width=unit(0.4,"line"),
+      legend.key.height=unit(0.4,"line")
+    )
+  p
+}
+

@@ -26,6 +26,8 @@ Suggests:
     rlist,
     fgsea,
     igraph,
+    ggplot2,
+    RColorBrewer,
     visNetwork,
     hypergraph,
     hyperdraw
