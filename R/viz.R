@@ -402,6 +402,7 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
   
   if (is.list(rxns)) {
     rxns <- lapply(rxns, all2idx, model=model0)
+    if (is.null(names(rxns))) names(rxns) <- 1:length(rxns)
   } else {
     rxns <- all2idx(model0, rxns)
     names(rxns) <- model0$rxns[rxns]
