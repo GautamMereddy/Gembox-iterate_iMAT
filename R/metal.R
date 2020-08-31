@@ -84,9 +84,10 @@ form.metal <- function(model, flux0, dflux) {
        rxns=model$rxns, mets=model$mets, csense="min", c=c, S=S, rowlb=rowlb, rowub=rowub, lb=lb, ub=ub)
 }
 
-get.metal.score <- function(model, lp.out, detail) {
+get.metal.score <- function(model, lp.out, detail, subset=NULL) {
   # given one metal model and the output from solving the model, compute the MTA score and other associated info
   # return a 1-row data.table
+  # subset is used if model is still the original model formed considering all reactions, but here want to compute the score considering only a subset of reactions 
 
   lp.out <- lp.out[[1]]
   if (length(lp.out$xopt)==1 && is.na(lp.out$xopt)) {
@@ -96,6 +97,7 @@ get.metal.score <- function(model, lp.out, detail) {
       return(data.table(solv.stat=lp.out$stat, score.change=NA, score.steady=NA, score.mta=NA))
     }
   }
+  if (is.null(subset)) subset <- 1:length(model$flux0) else if (is.logical(subset)) subset <- which(subset)
 
   v0 <- model$flux0
   v <- lp.out$xopt[1:length(v0)]
@@ -108,25 +110,30 @@ get.metal.score <- function(model, lp.out, detail) {
   bk0.yes <- bk0 & v<v0
   rvdn.yes <- rvdn & abs(v)<abs(v0)
   yes <- which(fw0.yes|bk0.yes|rvdn.yes)
+  yes <- yes[yes %in% subset]
 
   # reactions intended to change: failed
   fw0.no <- fw0 & v<v0
   bk0.no <- bk0 & v>v0
   rvdn.no <- rvdn & abs(v)>abs(v0)
   no <- which(fw0.no|bk0.no|rvdn.no)
+  no <- no[no %in% subset]
 
   # absolute differences between v and flux0 for the different sets of reactions
   ## reactions intended to change
   adv.yes <- ifelse(yes %in% which(rvdn.yes), abs(v0[yes])-abs(v[yes]), abs(v[yes]-v0[yes]))
   adv.no <- ifelse(no %in% which(rvdn.no), abs(v[no])-abs(v0[no]), abs(v[no]-v0[no]))
   ## reactions intended to remain steady
-  adv.st <- abs(v[model$st]-v0[model$st])
+  st <- model$st[model$st %in% subset]
+  adv.st <- abs(v[st]-v0[st])
 
   # score for reactions intended to change
-  s.ch <- sum(adv.yes * model$w[yes]) + sum(v[model$fw.or.bk] * model$w[model$fw.or.bk]) - sum(adv.no * model$w[no]) # score.yes - score.no
+  fw.or.bk <- model$fw.or.bk[model$fw.or.bk %in% subset]
+  w <- abs(model$dflux) / sum(abs(model$dflux[subset]), na.rm=TRUE) # weight
+  s.ch <- sum(adv.yes * w[yes]) + sum(v[fw.or.bk] * w[fw.or.bk]) - sum(adv.no * w[no]) # score.yes - score.no
   # score for reactions intended to remain steady
   s.st.uw <- sum(adv.st) # un-weighted
-  s.st <- s.st.uw / model$n.st
+  s.st <- s.st.uw / length(st)
   # raw score: just the (negated) optimal objective value
   #s.raw <- -lp.out$obj
   # adjusted score
