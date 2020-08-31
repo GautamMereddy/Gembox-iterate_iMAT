@@ -11,7 +11,7 @@ This is an R package that implements basic functionality of GEM, as well as seve
   - Depends: Matrix, data.table  
   - Imports: stringr, parallel  
   - LinkingTo: Rcpp, RcppArmadillo  
-  - Suggests: Rcplex2 (ruppinlab/Rcplex2), gurobi, R.matlab, sybilSBML, rlist, fgsea, igraph, hypergraph, hyperdraw, RColorBrewer, visNetwork
+  - Suggests: Rcplex2 (ruppinlab/Rcplex2), gurobi, R.matlab, sybilSBML, rlist, fgsea, igraph, ggplot2, RColorBrewer, visNetwork, hypergraph, hyperdraw
   - At least one of Rcplex2 (ruppinlab/Rcplex2) and gurobi is required for running optimizations
 
 This package for now only works on Linux and MacOS.
