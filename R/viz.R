@@ -388,7 +388,7 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
   # if sample points are available in the models, plot flux distribution with violin plots; if no sample points are available, plot lb and ub and their middle point (like a forest plot)
   # rxns and coefs: either vectors or lists (the latter is like get.diff.comb.flux); if more than one reaction, will plot in separate facets
   # group.names: names of the two groups; rxn.names: names of rxns in order, if null will use rxn IDs or names(rxns) (if a list)
-  # ylab: y-axis title text; ylims: if not NULL, can be a vector c(ymin,ymax) or a list of such vectors corresponding to the order of rxns
+  # ylab: y-axis title text; ylims: if not NULL, can be a vector c(ymin,ymax) or a list of such vectors corresponding to the order of rxns; some elements of the list can also be NULL, meaning not setting for the corresponding reaction
   # nr: number of rows if multiple facets
   # use.fva: whether to use lb/ub values computed by FVA if sample points are available
   # nsamples: number of samples to use from the end of samples
@@ -396,9 +396,13 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
   if (!requireNamespace(c("ggplot2","RColorBrewer"), quietly=TRUE)) {
     stop("Packages \"ggplot2\" and \"RColorBrewer\" needed for this function to work.")
   }
+  # if calling this function, attach these packages
+  library(ggplot2)
+  library(RColorBrewer)
   
   if (is.list(rxns)) {
     rxns <- lapply(rxns, all2idx, model=model0)
+    if (is.null(names(rxns))) names(rxns) <- 1:length(rxns)
   } else {
     rxns <- all2idx(model0, rxns)
     names(rxns) <- model0$rxns[rxns]
@@ -411,13 +415,13 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
     # if FVA result range is outside of ylims, shrink it to ylims (otherwise the FVA bound point is removed and the plot won't display correctly or won't reflect the correct range of data)
     if (!is.null(ylims)) {
       if (is.list(ylims)) {
-        ymins <- sapply(ylims, function(x) x[1])
-        ymaxs <- sapply(ylims, function(x) x[2])
+        ymins <- sapply(ylims, function(x) if (is.null(x)) NA else x[1])
+        ymaxs <- sapply(ylims, function(x) if (is.null(x)) NA else x[2])
       } else {
         ymins <- ylims[1]
         ymaxs <- ylims[2]
       }
-      fva.res[, c("lb0","lb1","ub0","ub1"):=list(ifelse(lb0>ymins,lb0,ymins), ifelse(lb1>ymins,lb1,ymins), ifelse(ub0<ymaxs,ub0,ymaxs), ifelse(ub1<ymaxs,ub1,ymaxs))]
+      fva.res[, c("lb0","lb1","ub0","ub1"):=list(ifelse(is.na(ymins) | lb0>ymins,lb0,ymins), ifelse(is.na(ymins) | lb1>ymins,lb1,ymins), ifelse(is.na(ymaxs) | ub0<ymaxs,ub0,ymaxs), ifelse(is.na(ymaxs) | ub1<ymaxs,ub1,ymaxs))]
     }
   }
   if (s) {
@@ -449,14 +453,18 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
   dat[, grp:=factor(grp, levels=group.names)]
   dat[, rxn:=factor(rxn, levels=rxn.names)]
 
-  if (is.null(ylims)) {
-    if (s) blk <- dat[, .(vbnd=c(1.1*min(v)-0.1*max(v), 1.1*max(v)-0.1*min(v)), grp=grp[1]), by=rxn] else blk <- dat[, .(vbnd=c(1.1*min(lb)-0.1*max(ub), 1.1*max(ub)-0.1*min(lb)), grp=grp[1]), by=rxn] # grp is just place-holder
-  } else {
-    if (is.list(ylims)) {
-      names(ylims) <- rxn.names
-      blk <- rbindlist(lapply(ylims, function(x) data.table(grp=group.names, vbnd=x)), idcol="rxn") # grp is just place-holder
-    } else blk <- data.table(rxn=rep(rxn.names,each=2), vbnd=ylims, grp=group.names[1]) # grp is just place-holder
+  if (s) blk <- dat[, .(vbnd=c(1.1*min(v)-0.1*max(v), 1.1*max(v)-0.1*min(v)), grp=grp[1]), by=rxn] else blk <- dat[, .(vbnd=c(1.1*min(lb)-0.1*max(ub), 1.1*max(ub)-0.1*min(lb)), grp=grp[1]), by=rxn] # grp is just place-holder
+  if (is.list(ylims)) {
+    names(ylims) <- rxn.names
+    for (i in names(ylims)) {
+      if (!is.null(ylims[[i]])) blk[rxn==i, vbnd:=ylims[[i]]]
+    }
+  } else if (!is.null(ylims)) {
+    blk <- data.table(rxn=rep(rxn.names,each=2), vbnd=ylims, grp=group.names[1]) # grp is just place-holder
   }
+  blk[, grp:=factor(grp, levels=group.names)]
+  blk[, rxn:=factor(rxn, levels=rxn.names)]
+
   p <- ggplot(dat, aes(x=grp, y=v, color=grp, fill=grp)) + ylab(ylab) + geom_blank(data=blk, aes(y=vbnd))
   # if sample points are available, plot flux distribution with violin plots; if no sample points are available, plot lb and ub and their middle point (like a forest plot)
   if (s) {
