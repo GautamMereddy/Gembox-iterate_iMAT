@@ -207,11 +207,12 @@ genes2rxns <- function(model, genes, mode=c(0,1), out=c("idx","rxns","rxnNames")
   res
 }
 
-exprs2fluxes <- function(model, x, na2zero=TRUE) {
+exprs2fluxes <- function(model, x, na.before=NA, na.after=0) {
   # map a numeric vector x of expression levels of genes to the flux levels of reactions in the model
   # x should contain either continuous expression values (then the output will also be continuous) or discrete values from {-1,0,1,NA} representing low/medium/high expression levels
   # x should be named by gene symbols as used in model$genes, or if it's unnamed and length being length(model$genes), assume it's already in the same order as model$genes
-  # NA's in x will be kept and propagated during the conversion to flux values; if na2zero==TRUE, NA in the final flux vector will be replaced with 0
+  # NA's in x will be kept and propagated during the conversion to flux values by default; or specify na.before and NA will be changed to this value
+  # NA's in the result flux values will be changed to 0 by default; or specify na.after and NA will be changed to that value (or na.after=NA to keep NA)
 
   if (is.null(names(x))) {
     if (length(x)==length(model$genes)) {
@@ -221,6 +222,7 @@ exprs2fluxes <- function(model, x, na2zero=TRUE) {
     x <- x[model$genes]
     if (all(is.na(x))) stop("Input doesn't contain any of the model genes!")
   }
+  x[is.na(x)] <- na.before
 
   if (all(x %in% c(-1,0,1,NA))) {
     `&` <- function(a,b) {
@@ -237,14 +239,15 @@ exprs2fluxes <- function(model, x, na2zero=TRUE) {
   }
 
   res <- sapply(model$rules, function(i) eval(parse(text=i)))
-  if (na2zero) res[is.na(res)] <- 0
+  res[is.na(res)] <- na.after
   unname(res)
 }
 
-de2dflux <- function(model, x, na2zero=TRUE) {
+de2dflux <- function(model, x, na.before=NA, na.after=0) {
   # map a numeric vector x of differential gene expression values (from {-1,0,1,NA}, representing decreased/unchanged/increased expressions) to the flux changes of reactions in the model (also {-1,0,1})
   # x should be named by gene symbols as used in model$genes, or if it's unnamed and length being length(model$genes), assume it's already in the same order as model$genes
-  # NA's in x will be kept and propagated during the conversion to flux values; if na2zero==TRUE, NA in the final flux vector will be replaced with 0
+  # NA's in x will be kept and propagated during the conversion to flux values by default; or specify na.before and NA will be changed to this value
+  # NA's in the result flux values will be changed to 0 by default; or specify na.after and NA will be changed to that value (or na.after=NA to keep NA)
   # other than the propagation of NA, this function reproduces the behavior of the MATLAB evalExpRule function from the original MTA code, although I really think the behavior for de2dflux should be no different from that of exprs2fluxes
 
   if (!all(x %in% c(-1,0,1,NA))) stop("Expression values in x should be from {-1,0,1,NA}.")
@@ -256,6 +259,7 @@ de2dflux <- function(model, x, na2zero=TRUE) {
     x <- x[model$genes]
     if (all(is.na(x))) stop("Input doesn't contain any of the model genes!")
   }
+  x[is.na(x)] <- na.before
 
   `&` <- function(a,b) {
     if (isTRUE(a==0 || b==0 || a!=b)) return(0) # if one is NA and the other is 0, for sure the result is 0
@@ -267,7 +271,7 @@ de2dflux <- function(model, x, na2zero=TRUE) {
   }
 
   res <- sapply(model$rules, function(i) eval(parse(text=i)))
-  if (na2zero) res[is.na(res)] <- 0
+  res[is.na(res)] <- na.after
   unname(res)
 }
 
