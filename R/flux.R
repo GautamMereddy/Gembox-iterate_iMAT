@@ -72,6 +72,39 @@ fva <- function(model, rxns="all", nc=1L, biomass=NULL, biomass.rgx="biomass", s
   data.table(id=rxns, rxn=model$rxns[rxns], vmin=min, vmax=max)
 }
 
+fva2 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FALSE, solv.pars=list()) {
+  # flux variability analysis after solving model, for rxns given as indices of IDs as in model$rxns; "all" for all rxns
+  # model is an arbitrary model, will first solve it to get the optimal objective value, then do FVA while requiring the objective function is at the optimal value, subject to a small margin as specified in gap and agap
+  # gap and agap: relative and absolute margin for the optimal objective value constraint, i.e. |obj-obj.opt|<=agap AND |obj-obj.opt|<=|gap*obj.opt|, if one is NULL then that one is not used, default to both NULL means gap==agap==0
+  # return same as fva(); but if keep.solv.out=TRUE, return list(fva.res, solver.out)
+
+  # solve the model to get optimal objective value
+  solv.pars$nsol <- 1
+  solv.pars$PoolSolutions <- 1
+  solv.out <- solve.model(model, pars=solv.pars)
+  if (solv.out[[1]]$stat %in% .pkg.const$infeas.stat) stop("Stopped due to infeasible solution.")
+  obj.opt <- solv.out[[1]]$obj
+  if (!is.null(gap) && is.null(agap)) {
+    lb <- obj.opt - abs(obj.opt*gap)
+    ub <- obj.opt + abs(obj.opt*gap)
+  } else if (is.null(gap) && !is.null(agap)) {
+    lb <- obj.opt - agap
+    ub <- obj.opt + agap
+  } else if (!is.null(gap) && !is.null(agap)) {
+    lb <- obj.opt - min(agap, abs(obj.opt*gap))
+    ub <- obj.opt + min(agap, abs(obj.opt*gap))
+  } else lb <- ub <- obj.opt
+  model.opt <- add.constraint(model, 1:length(model$c), model$c, lb, ub)
+
+  # forcing optimal objective value, do fva
+  solv.pars$trace <- 0
+  solv.pars$OutputFlag <- 0
+  res <- fva(model.opt, rxns=rxns, nc=nc, solv.pars=solv.pars)
+
+  if (keep.solv.out) res <- list(fva.res=res, solver.out=solv.out[[1]])
+  res
+}
+
 run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) {
   # a wrapper function to run algorithm `f` under the original wildtype model as well as models where each rxn in rxns is knocked out (i.e. both lb and ub set to 0)
   # model is the formulated model for running the algorithm `f`; it should be derived from the original metabolic model by adding columns and rows to the S matrix, such that indices of the rxns and mets do not change
