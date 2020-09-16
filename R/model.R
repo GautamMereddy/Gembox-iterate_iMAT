@@ -46,7 +46,7 @@ read.matlab.model <- function(fn) {
   # rules mapping genes to reactions
   if ("rules" %in% names(model)) {
     model$rules <- stringr::str_replace_all(model$rules, "x\\([0-9]+\\)", function(x) paste0("x[",stringr::str_sub(x,3,-2),"]"))
-    model$rules[is.na(model$rules)] <- "0"
+    model$rules[is.na(model$rules)] <- ""
   }
 
   if ("grRules" %in% names(model) && !"rules" %in% names(model)) {
@@ -54,7 +54,7 @@ read.matlab.model <- function(fn) {
     gns.rgx <- "[A-Za-z0-9_.]+"
     rules <- sapply(model$grRules, function(x) {
       if (is.na(x)) {
-        x <- "0"
+        x <- ""
       } else {
         x <- stringr::str_replace_all(x, " and ", " & ")
         x <- stringr::str_replace_all(x, " or ", " \\| ")
@@ -250,7 +250,7 @@ make.conjunct.model <- function(model, n=2) {
     tmp <- model$rules[not.erxn.ids]
     tmp <- stringr::str_replace_all(tmp, "[0-9]+", function(x) {
       x <- as.integer(x)
-      if (x==0) 0 else x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
+      x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
     })
     res$rules <<- c(res$rules, tmp)
     # for erxn.ids that are mapped to genes, then need to recreate rules for these reactions as sth like "(rules.cell1) | (rules.cell2)"
@@ -258,7 +258,7 @@ make.conjunct.model <- function(model, n=2) {
     dupg.erxn.ids <- erxn.ids[sapply(tmp, length)!=0]
     tmp <- stringr::str_replace_all(model$rules[dupg.erxn.ids], "[0-9]+", function(x) {
       x <- as.integer(x)
-      if (x==0) 0 else x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
+      x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
     })
     res$rules[dupg.erxn.ids] <<- paste0("(",res$rules[dupg.erxn.ids],") | (",tmp,")")
   }

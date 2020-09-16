@@ -238,8 +238,9 @@ exprs2fluxes <- function(model, x, na.before=NA, na.after=0) {
     `|` <- function(a,b) max(a,b)
   }
 
-  res <- sapply(model$rules, function(i) eval(parse(text=i)))
+  res <- sapply(model$rules, function(i) if (i=="") NA else eval(parse(text=i)))
   res[is.na(res)] <- na.after
+  res[model$rules==""] <- NA # still NA for rxns w/o genes
   unname(res)
 }
 
@@ -270,8 +271,9 @@ de2dflux <- function(model, x, na.before=NA, na.after=0) {
     return(a+b) # all NA cases are undetermined and NA will be returned
   }
 
-  res <- sapply(model$rules, function(i) eval(parse(text=i)))
+  res <- sapply(model$rules, function(i) if (i=="") NA else eval(parse(text=i)))
   res[is.na(res)] <- na.after
+  res[model$rules==""] <- NA # still NA for rxns w/o genes
   unname(res)
 }
 
@@ -380,7 +382,7 @@ c.model <- function(model1, model2, c.vars=NULL, cx.vars=NULL) {
     if (field %in% c("lb","ub","c","rowlb","rowub","b","metFormulas", c.vars)) x <- c(x1, x2)
     if (field %in% c("rxns","rxnNames","subSystems","genes","mets","metNames", cx.vars)) x <- c(paste0(x1,"_1"), paste0(x2,"_2"))
     if (field=="rules") {
-      x2[x2!="0"] <- stringr::str_replace_all(x2[x2!="0"], "[0-9]+", function(x) as.integer(x)+length(model1$genes))
+      x2[x2!=""] <- stringr::str_replace_all(x2[x2!=""], "[0-9]+", function(x) as.integer(x)+length(model1$genes))
       x <- c(x1, x2)
     }
     x
@@ -429,7 +431,7 @@ add.rxn <- function(model, rxn, mets, coefs, lb, ub, rule="0", rxnName=rxn, subS
   x <- rep(0, nrow(model$S))
   x[match(mets, model$mets)] <- coefs
   model$S <- cbind(model$S, x)
-  if (rule!="0") {
+  if (rule!="") {
     gns <- stringr::str_extract_all(rule, "[^()&| ]+")[[1]]
     model$genes <- c(model$genes, gns[!gns %in% model$genes])
     rule <- stringr::str_replace_all(rule, "[^()&| ]+", function(x) paste0("x[",match(x,model$genes),"]"))
@@ -570,9 +572,9 @@ reduce.model <- function(model, v=NULL) {
     model$rxns[rxns[1]] <- paste(model$rxns[rxns], collapse="_AND_")
     model$rxnNames[rxns[1]] <- paste(model$rxnNames[rxns], collapse="_AND_")
     tmp <- model$rules[rxns]
-    tmp <- tmp[tmp!="0"]
+    tmp <- tmp[tmp!=""]
     if (length(tmp)==0) {
-      model$rules[rxns[1]] <- "0"
+      model$rules[rxns[1]] <- ""
     } else if (length(tmp)==1) {
       model$rules[rxns[1]] <- tmp
     } else model$rules[rxns[1]] <- paste0("(", paste(tmp, collapse=") & (") ,")")

@@ -3,7 +3,7 @@
 
 ### --- prepare data for MTA --- ###
 
-de.dt2dflux <- function(model, de.res, topn=100, padj.cutoff=0.05, na2zero=TRUE) {
+de.dt2dflux <- function(model, de.res, topn=100, padj.cutoff=0.05, na2zero=TRUE, old=TRUE) {
   # map a differential expression analysis result given in de.res to differential fluxes of reactions in a metabolic model
   # de.res: differential expresssion result as a data.table, with the columns named id (gene symbols), log.fc (log fold-change) and pval (raw p value)
   # topn and padj.cutoff: at most top topn DE genes in either direction with BH-adjusted p value < padj.cutoff are kept as the changed genes (i.e. with values -1/1), all other genes are set to 0 (unchanged)
@@ -18,7 +18,8 @@ de.dt2dflux <- function(model, de.res, topn=100, padj.cutoff=0.05, na2zero=TRUE)
   names(de.int) <- de.res$id
 
   # map to reactions
-  df <- de2dflux(model, de.int, na2zero=na2zero)
+  df <- de2dflux(model, de.int, na.after=ifelse(na2zero,0,NA))
+  if (old) df[model$rules==""] <- 0 # I later changed de2dflux such that rxns w/o genes are NA; previously such cases are 0; I added this to keep the old behaviour here for MTA
   npos <- sum(df>0, na.rm=TRUE)
   nneg <- sum(df<0, na.rm=TRUE)
   if (is.infinite(topn)) {
