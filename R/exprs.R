@@ -73,23 +73,25 @@ form.gimme <- function(model, w, rmfs, rmf.lbs) {
 
   # formulating the minimization of weighted sum of absolute values \Sum w|v|, by replacing v with two slack variables v1, v2 such that v=v1-v2, then |v| can be expressed as v1+v2
   # however, I still keep v in the formulation because it makes it easier to run FVA after initially solving the model, if needed
+  rxns1 <- which(w!=0 & !is.na(w))
+  w <- w[rxns1]
+  n <- length(rxns1)
   S <- rbind(
-    cbind( model$S, sparseMatrix(NULL, NULL, dims=c(n.mets, 2*n.rxns)) ),
-    cbind( Diagonal(n.rxns),  Diagonal(n.rxns,-1),  Diagonal(n.rxns) )
+    cbind( model$S,                          sparseMatrix(NULL, NULL, dims=c(n.mets, 2*n)) ),
+    cbind( sparseMatrix(1:n, rxns1, x=1, dims=c(n, n.rxns)),  Diagonal(n,-1),  Diagonal(n) )
   )
-  rowlb <- c(model$rowlb, rep(0, n.rxns))
-  rowub <- c(model$rowub, rep(0, n.rxns))
-  lb <- c(model$lb, rep(0, n.rxns))
-  ub <- c(model$ub, rep(Inf, n.rxns))
+  rowlb <- c(model$rowlb, rep(0, n))
+  rowub <- c(model$rowub, rep(0, n))
+  lb <- c(model$lb, rep(0, n))
+  ub <- c(model$ub, rep(Inf, n))
   c <- c(rep(0, n.rxns), w, w)
-  c[is.na(c)] <- 0
   vtype <- rep("C", length(c))
 
   # handling |v|>lb constraints, if any, by adding an binary variable y and the constraint lb <= v + My <= M-lb, where M is a large constant, here I used M=1e4
   n.rmfs <- length(rmfs)
   if (n.rmfs>0) {
 	S <- rbind(
-	  cbind( S,                            sparseMatrix(NULL, NULL, dims=c(n.mets, n.rmfs)) )
+	  cbind( S,                            sparseMatrix(NULL, NULL, dims=c(nrow(S), n.rmfs)) )
 	  cbind( sparseMatrix(1:n.rmfs, rmfs, dims=c(n.rmfs, ncol(S))), Diagonal(n.rmfs, x=1e4) )
   	)
   	rowlb <- c(rowlb, rmf.lbs)
