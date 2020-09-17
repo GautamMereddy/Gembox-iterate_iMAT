@@ -72,7 +72,7 @@ fva <- function(model, rxns="all", nc=1L, biomass=NULL, biomass.rgx="biomass", s
   data.table(id=rxns, rxn=model$rxns[rxns], vmin=min, vmax=max)
 }
 
-fva2 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FALSE, solv.pars=list()) {
+fva1 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FALSE, solv.pars=list()) {
   # flux variability analysis after solving model, for rxns given as indices of IDs as in model$rxns; "all" for all rxns
   # model is an arbitrary model, will first solve it to get the optimal objective value, then do FVA while requiring the objective function is at the optimal value, subject to a small margin as specified in gap and agap
   # gap and agap: relative and absolute margin for the optimal objective value constraint, i.e. |obj-obj.opt|<=agap AND |obj-obj.opt|<=|gap*obj.opt|, if one is NULL then that one is not used, default to both NULL means gap==agap==0

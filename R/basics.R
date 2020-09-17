@@ -440,18 +440,21 @@ add.rxn <- function(model, rxn, mets, coefs, lb, ub, rule="0", rxnName=rxn, subS
   model
 }
 
-set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1L, solv.pars=get.pars("lp", list())) {
+set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, rel.lb.mode=c(0,1), nc=1L, solv.pars=get.pars("lp", list())) {
   # set the lb's and ub's of reactions, given as indices or IDs as in model$rxns
   # to set only lb's or only ub's, pass the other argument as NULL
-  # relative: if TRUE, lb's and ub's will be set to v_max*lbs and v_max*ubs, respectively; in the case of reversible reactions (actual v_min<0), lb's will be set to v_min*lbs (v_min and v_max determined by FVA)
+  # relative: if TRUE, lb's and ub's will be set to v_max*lbs and v_max*ubs, respectively; in the case of reversible reactions (actual v_min<0), lb's will be set to v_min*lbs (v_min and v_max determined by FVA), unless rel.lb.mode==1, in which case will always use v_max*lbs
   # nc: number of cores passed to get.opt.fluxes(); solv.pars: solver parameters passed to get.opt.fluxes(), by default LP
 
+  rel.lb.mode <- match.arg(as.character(rel.lb.mode[1]), c("0","1"))
   x <- all2idx(model, rxns)
   if (relative) {
     suppressMessages( vmaxs <- get.opt.fluxes(model, x, "max", nc, solv.pars) )
     if (!is.null(lbs)) {
-      suppressMessages( vmins <- get.opt.fluxes(model, x, "min", nc, solv.pars) )
-      model$lb[x] <- lbs * ifelse(vmins<0, vmins, vmaxs)
+      if (rel.lb.mode=="0") {
+        suppressMessages( vmins <- get.opt.fluxes(model, x, "min", nc, solv.pars) )
+        model$lb[x] <- lbs * ifelse(vmins<0, vmins, vmaxs)
+      } else if (rel.lb.mode=="1") model$lb[x] <- lbs * vmaxs
     }
     if (!is.null(ubs)) model$ub[x] <- ubs * vmaxs
   } else {
@@ -459,6 +462,36 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, nc=1
     if (!is.null(ubs)) model$ub[x] <- ubs
   }
   model
+}
+
+set.biomass.bounds <- function(model, rgx="biomass", lb=NULL, ub=NULL, relative=TRUE) {
+  # set the lb and/or ub of biomass reaction, rgx is the regex for biomass reaction ID as in model$rxns
+
+  bm.idx <- get.biomass.idx(model, rgx)
+  set.rxn.bounds(model, rxns=bm.idx, lbs=lb, ubs=ub, relative=relative)
+}
+
+set.required.rxns <- function(model, rxns, lbs, relative=TRUE) {
+  # set the lbs for a set of "required" rxns, i.e. for these rxns we want |v|>=cutoff (cutoff=lbs, or lbs*vmax if relative=TRUE)
+  # for reversible reactions with vmin < -cutoff, the constraint is non-convex and cannot be set, will print message and return list(model, no.set.rxns, no.set.lbs) for the rxns whose lbs are not set
+  # rxns is a vector of rxn indices or IDs, can also contain element that matches "biomass", which will be used as regex for biomass reaction
+
+  bm <- grep("biomass", rxns, ignore.case=TRUE)
+  if (is.character(rxns) && length(bm)!=0) {
+    bm.idx <- get.biomass.idx(model, rxns[bm])
+    rxns[bm] <- model$rxns[bm.idx]
+    rxns <- all2idx(model, rxns)
+  } else rxns <- all2idx(model, rxns)
+
+  if (length(lbs)==1) lbs <- rep(lbs, length(rxns))
+  if (relative) lbs <- lbs * get.opt.fluxes(model, rxns, "max")
+  lbs0 <- get.opt.fluxes(model, rxns, "min")
+  is.rev <- lbs0 < -lbs
+  model$lb[rxns[!is.rev]] <- lbs[!is.rev]
+  if (any(is.rev)) {
+    message("Cannot set lbs due to reversibility for some rxns, returned list(model, no.set.rxns, no.set.lbs)")
+    return(list(model=model, no.set.rxns=rxns[is.rev], no.set.lbs=lbs[is.rev]))
+  } else return(model)
 }
 
 set.medium <- function(model, medium, set.all=FALSE, except=c("h","na1","k","nh4","ca2","fe2","oh1","cl","hco3","ac","so4","pi","h2o","o2","co2"), cells.per.ml=2e5, cell.gdw=4e-10, dbl.hr=24) {
