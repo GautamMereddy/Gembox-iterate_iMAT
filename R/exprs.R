@@ -134,7 +134,7 @@ exprs2fluxes.s <- function(model, x, s, x.na.before=NA, s.na.before=NA, x.na.aft
   	} else {
   	  r1 <- eval(parse(text=i))
   	  if (!is.na(r1)) {
-  	  	ids <- as.numeric(stringr::str_extract_all(i, "[0-9]+")[[1]])
+  	  	ids <- as.integer(stringr::str_extract_all(i, "[0-9]+")[[1]])
   	  	r2 <- s[ids][x[ids]==r1]
   	  } else r2 <- NA
   	  res <- c(r1,r2)
