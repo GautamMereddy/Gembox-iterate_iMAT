@@ -104,9 +104,56 @@ form.gimme <- function(model, w, rmfs, rmf.lbs) {
 
 ### --- Lee et al. BMC Syst Biol 2012 --- ### 
 
-lee.smallbone <- function(model, expr, weights=1, mode=c(0,1), nc=1L, gap=NULL, agap=NULL, solv.pars=list(), samp.pars=NULL) {
+exprs2fluxes.s <- function(model, x, s, x.na.before=NA, s.na.before=NA, x.na.after=NA, s.na.after=NA) {
+  # map a numeric vector x of expression levels of genes to the flux levels of reactions in the model, together with a s vector of other values associated with each gene, e.g. sd of each gene, or some other score
+  # x should contain either continuous expression values (then the output will also be continuous) or discrete values from {-1,0,1,NA} representing low/medium/high expression levels
+  # x should be named by gene symbols as used in model$genes, or if it's unnamed and length being length(model$genes), assume it's already in the same order as model$genes
+  # s should correspond to x in the same order
+  # NA's in x will be kept and propagated during the conversion to flux values by default; or specify na.before and NA will be changed to this value
+  # NA's in the result flux values will be changed to 0 by default; or specify na.after and NA will be changed to that value (or na.after=NA to keep NA)
+
+  if (is.null(names(x))) {
+    if (length(x)==length(model$genes)) {
+      message("exprs2fluxes.s(): Assuming the input vector is in the same order as model$genes.")
+    } else stop("Input vector and model$genes have different lengths!")
+  } else {
+  	tmp <- match(model$genes, names(x))
+    x <- x[tmp]
+    s <- s[tmp]
+    if (all(is.na(x))) stop("Input doesn't contain any of the model genes!")
+  }
+  x[is.na(x)] <- x.na.before
+  s[is.na(s)] <- s.na.before
+
+  `&` <- function(a,b) min(a,b)
+  `|` <- function(a,b) max(a,b)
+
+  res <- sapply(model$rules, function(i) {
+  	if (i=="") {
+  	  res <- c(NA, NA)
+  	} else {
+  	  r1 <- eval(parse(text=i))
+  	  if (!is.na(r1)) {
+  	  	ids <- as.numeric(stringr::str_extract_all(i, "[0-9]+")[[1]])
+  	  	r2 <- s[ids][x[ids]==r1]
+  	  } else r2 <- NA
+  	  res <- c(r1,r2)
+  	}
+  	res
+  })
+  x.res <- res[1,]
+  s.res <- res[2,]
+  x.res[is.na(x.res)] <- x.na.after
+  s.res[is.na(s.res)] <- s.na.after
+  x.res[model$rules==""] <- NA # still NA for rxns w/o genes
+  s.res[model$rules==""] <- NA
+  list(x=unname(x.res), s=unname(s.res))
+}
+
+lee.smallbone <- function(model, expr, sd=1, mode=c(0,1), nc=1L, gap=NULL, agap=NULL, solv.pars=list(), samp.pars=NULL) {
   # function for running the algorithm of Lee et al., the function name is from the surnames of the two co-first authors
   # expr is a vector of non-negative gene expression values (may be pre-normalized), either with names as gene symbols as in model$genes, or if unnamed the length and order should correspond to model$genes
+  # sd is the standard deviation of gene expression corresonding to expr in the same order, used to generate weights
   # mode 0 means solve the model once and return list(ls.model, fluxes) where fluxes is the vector of optimal fluxes;
   # mode 1 means first get optimal objective value, then constrain obj at optimal or near optimal (as defined by gap and agap), then run FVA (with n.cores=nc), and return list(ls.model, result.model, fluxes) where result.model is updated model with rxn bounds set to the FVA output
   # when mode==1 and samp.pars not NULL, will sample the resulting model
@@ -114,8 +161,10 @@ lee.smallbone <- function(model, expr, weights=1, mode=c(0,1), nc=1L, gap=NULL, 
   mode <- match.arg(as.character(mode[1]), c("0","1"))
 
   # process expression values
-  x <- exprs2fluxes(model, expr, na.after=NA)
-  if (length(weights)==1) w <- rep(weights, length(x))
+  if (length(sd)==1) sd <- rep(sd, length(expr)) else if (length(sd)!=length(expr)) stop("sd should correspond to expr in the same order.")
+  tmp <- exprs2fluxes.s(model, expr, sd)
+  x <- tmp$x
+  w <- 1/tmp$s
 
   # form model and solve iteratively
   nr <- which(model$lb>=0)
@@ -153,6 +202,10 @@ form.lee.smallbone <- function(model, idx, x, w) {
   n.rxns <- ncol(model$S)
 
   # formulating the minimization of weighted sum of absolute values \Sum w|v-x|, by adding two slack variables v1, v2 such that v-x=v1-v2, then |v-x| can be expressed as v1+v2
+  tmp <- !is.na(x) & !is.na(w)
+  idx <- idx[tmp]
+  x <- x[tmp]
+  w <- w[tmp]
   n <- length(idx)
   S <- rbind(
     cbind( model$S,                        sparseMatrix(NULL, NULL, dims=c(n.mets, 2*n)) ),
