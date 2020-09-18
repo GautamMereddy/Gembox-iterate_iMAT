@@ -494,6 +494,57 @@ set.required.rxns <- function(model, rxns, lbs, relative=TRUE) {
   } else return(model)
 }
 
+shrink.model.bounds <- function(model, rxns="default", bm.epsil=1e-4, relative=FALSE, min.step.size=0.1, bm.rgx="biomass") {
+  # iteratively shrinking the bounds of rxns simultaneously in steps, until maximal biomass production falls below original bm.max - bm.epsil (or bm.max*(1-bm.epsil) if relative=TRUE)
+  # will start with step size 100, then will adaptively reduce step size x0.1, until smaller than min.step.size
+  # rxns: indices or IDs; "default" means all rxns with the default bounds absolute value>=1e3; or "all" which means all rxns
+  # if any reaction has default bounds absolute value>=1e3, will first set the bounds to 1e3
+  # the default argument values correspond to that used in PRIME, Yizhak et al. eLife 2014
+
+  uid <- model$ub>=1e3
+  model$ub[uid] <- 1e3
+  lid <- model$lb<= -1e3
+  model$lb[lid] <- -1e3
+
+  if (rxns=="all") {
+    uid <- model$ub>0
+    lid <- model$lb<0
+  } else if (rxns!="default") {
+    rxns <- all2idx(model, rxns)
+    uid <- intersect(rxns, which(model$ub>0))
+    lid <- intersect(rxns, which(model$lb<0))
+  }
+  
+  bm.max <- get.opt.fluxes(model, bm.rgx)
+  if (relative) bm.thres <- bm.max*(1-bm.epsil) else bm.thres <- bm.max - bm.epsil
+  # iteratively shrinking the bounds of all rxns (in uid and lid) simultaneously
+  ub <- model$ub[uid]
+  lb <- model$lb[uid]
+  ss <- 100
+  while (ss>=min.step.size) {
+    repeat {
+      ub1 <- ub - ss
+      ub1[ub1<=0] <- 0
+      model$ub[uid] <- ub1
+      lb1 <- lb + ss
+      lb1[lb1>=0] <- 0
+      model$lb[lid] <- lb1
+      bm.max <- get.opt.fluxes(model, bm.rgx)
+      if (bm.max>=bm.thres) {
+        ub <- ub1
+        lb <- lb1
+      } else {
+        model$ub[uid] <- ub
+        model$lb[lid] <- lb
+        break
+      }
+    }
+    ss <- ss/10
+  }
+
+  model
+}
+
 set.medium <- function(model, medium, set.all=FALSE, except=c("h","na1","k","nh4","ca2","fe2","oh1","cl","hco3","ac","so4","pi","h2o","o2","co2"), cells.per.ml=2e5, cell.gdw=4e-10, dbl.hr=24) {
   # set model constraint based on medium composition, by adjusting flux bounds of cross-plasma membrane transport reactions
   # this for now doesn't work ideally for multicellular models
