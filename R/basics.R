@@ -559,11 +559,13 @@ rm.blocked.rxns <- function(model, nc=1L, rm.extra=FALSE, update.genes=FALSE, so
 }
 
 convert.rev.rxns <- function(model) {
-  # convert each reversible rxn in model into two irreversible rxns representing the positive and negative halves, both with lb==0
-  # the positive half will keep its original ID (rxns) and name (rxnNames), the ID and name of the negative half will be the original name suffixed with "_REV"
+  # convert each reversible rxn in model into two irreversible rxns representing the forward and backward halves, both with lb==0
+  # the ID (rxns) and name (rxnNames) of the forward/backward halves will be appended with "_FORW" and "_BACK" respectively
   # These fields below are assumed to be present in the model
   # "rxns","rxnNames","lb","ub","c","rules","subSystems","S"
+  # the returned model will contain two extra fields `forw.idx` and `back.idx` for indices of the forward/backward halves in the new model (in the corresponding order)
 
+  n0 <- length(model$rxns)
   rev.idx <- which(model$lb<0)
   nrev <- length(rev.idx)
   model$S <- cbind(model$S, -model$S[, rev.idx])
@@ -571,11 +573,15 @@ convert.rev.rxns <- function(model) {
   model$lb[rev.idx] <- 0
   model$lb <- c(model$lb, rep(0, nrev))
   model$ub <- c(model$ub, -rev.lb)
-  model$rxns <- c(model$rxns, paste0(model$rxns[rev.idx],"_REV"))
-  model$rxnNames <- c(model$rxnNames, paste0(model$rxnNames[rev.idx],"_REV"))
+  model$rxns[rev.idx] <- paste0(model$rxns[rev.idx],"_FORW")
+  model$rxnNames[rev.idx] <- paste0(model$rxnNames[rev.idx],"_FORW")
+  model$rxns <- c(model$rxns, paste0(model$rxns[rev.idx],"_BACK"))
+  model$rxnNames <- c(model$rxnNames, paste0(model$rxnNames[rev.idx],"_BACK"))
   model$c <- c(model$c,  model$c[rev.idx])
   model$rules <- c(model$rules, model$rules[rev.idx])
   model$subSystems <- c(model$subSystems, model$subSystems[rev.idx])
+  model$forw.idx <- rev.idx
+  model$back.idx <- (n0+1):(n0+nrev)
   model
 }
 
