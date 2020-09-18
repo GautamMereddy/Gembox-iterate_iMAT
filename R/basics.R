@@ -325,22 +325,21 @@ subsystems2gsets <- function(model, by=c("rxn","met"), exclude.mets=NULL, exclud
 
 ### --- model manipulation, e.g. subsetting models, adding/removing reactions, etc. --- ###
 
-subset.model <- function(model, i, j, rm.extra=FALSE, update.genes=FALSE, row.vars=NULL, col.vars=NULL) {
+subset.model <- function(model, i=NULL, j=NULL, rm.extra=FALSE, update.genes=FALSE, row.vars=NULL, col.vars=NULL) {
   # subset model like a matrix, i for metabolites, j for reactions; i and j can be logical or indices or IDs as in model$mets and model$rxns, negative indices can also be used; i or j can be NULL (not subsetting)
   # rm.extra: after subsetting, whether to further remove "empty" reactions and metabolites involved in no reaction
   # update.genes: whether to remove genes no longer in the model, this will be done by setting those genes to NA to avoid the need to completely rewrite model$rules; but note that this will affect genes2fluxes()
   # the fields in the fields variable below are assumed to be present in the model, and only these fields of the model are kept and updated, unless:
   # names of extra row (metabolite-related) or column (reaction-related) to update and keep in the returned model are given in row.vars and col.vars
+  if (is.null(i) && is.null(j)) stop("Please provide at least one of i or j.")
   fields <- c("rxns","rxnNames","lb","ub","c","rules","subSystems","genes","mets","metNames","metFormulas","rowlb","rowub","b","S")
   fields <- c(fields, row.vars, col.vars)
   fields <- intersect(fields, names(model))
 
   i <- all2idx(model, i)
   j <- all2idx(model, j)
-  if (all(i<0)) i <- setdiff(1:nrow(model$S), -i)
-  if (all(j<0)) j <- setdiff(1:ncol(model$S), -j)
-  if (is.null(i)) i <- 1:nrow(model$S)
-  if (is.null(j)) j <- 1:ncol(model$S)
+  if (is.null(i)) i <- 1:nrow(model$S) else if (all(i<0)) i <- setdiff(1:nrow(model$S), -i)
+  if (is.null(j)) j <- 1:ncol(model$S) else if (all(j<0)) j <- setdiff(1:ncol(model$S), -j)
 
   if (rm.extra) {
     tmp <- model$S
@@ -494,17 +493,18 @@ set.required.rxns <- function(model, rxns, lbs, relative=TRUE) {
   } else return(model)
 }
 
-shrink.model.bounds <- function(model, rxns="default", bm.epsil=1e-4, relative=FALSE, min.step.size=0.1, bm.rgx="biomass") {
+shrink.model.bounds <- function(model, rxns="default", default.bnd=1e3, bm.epsil=1e-4, relative=FALSE, min.step.size=0.1, bm.rgx="biomass", solv.pars=list()) {
   # iteratively shrinking the bounds of rxns simultaneously in steps, until maximal biomass production falls below original bm.max - bm.epsil (or bm.max*(1-bm.epsil) if relative=TRUE)
-  # will start with step size 100, then will adaptively reduce step size x0.1, until smaller than min.step.size
-  # rxns: indices or IDs; "default" means all rxns with the default bounds absolute value>=1e3; or "all" which means all rxns
-  # if any reaction has default bounds absolute value>=1e3, will first set the bounds to 1e3
+  # will start with step size=default.bnd/10, then will adaptively reduce step size x0.1, until smaller than min.step.size
+  # rxns: indices or IDs; "default" means all rxns with the default bounds absolute value>=default.bnd; or "all" which means all rxns
+  # if any reaction has default bounds absolute value>=default.bnd, will first set the bounds to default.bnd
   # the default argument values correspond to that used in PRIME, Yizhak et al. eLife 2014
 
-  uid <- model$ub>=1e3
-  model$ub[uid] <- 1e3
-  lid <- model$lb<= -1e3
-  model$lb[lid] <- -1e3
+  solv.pars <- get.pars("lp", solv.pars)
+  uid <- model$ub>=default.bnd
+  model$ub[uid] <- default.bnd
+  lid <- model$lb<= -default.bnd
+  model$lb[lid] <- -default.bnd
 
   if (rxns=="all") {
     uid <- model$ub>0
@@ -515,12 +515,12 @@ shrink.model.bounds <- function(model, rxns="default", bm.epsil=1e-4, relative=F
     lid <- intersect(rxns, which(model$lb<0))
   }
   
-  bm.max <- get.opt.fluxes(model, bm.rgx)
+  bm.max <- get.opt.fluxes(model, bm.rgx, solv.pars=solv.pars)
   if (relative) bm.thres <- bm.max*(1-bm.epsil) else bm.thres <- bm.max - bm.epsil
   # iteratively shrinking the bounds of all rxns (in uid and lid) simultaneously
   ub <- model$ub[uid]
   lb <- model$lb[uid]
-  ss <- 100
+  ss <- default.bnd/10
   while (ss>=min.step.size) {
     repeat {
       ub1 <- ub - ss
@@ -529,7 +529,7 @@ shrink.model.bounds <- function(model, rxns="default", bm.epsil=1e-4, relative=F
       lb1 <- lb + ss
       lb1[lb1>=0] <- 0
       model$lb[lid] <- lb1
-      bm.max <- get.opt.fluxes(model, bm.rgx)
+      bm.max <- get.opt.fluxes(model, bm.rgx, solv.pars=solv.pars)
       if (bm.max>=bm.thres) {
         ub <- ub1
         lb <- lb1
@@ -633,6 +633,21 @@ convert.rev.rxns <- function(model) {
   model$subSystems <- c(model$subSystems, model$subSystems[rev.idx])
   model$forw.idx <- rev.idx
   model$back.idx <- (n0+1):(n0+nrev)
+  model
+}
+
+revert.rev.rxns <- function(model) {
+  # recombine the forward/backward halves of reversible reactions resulted from convert.rev.rxns()
+  # These fields below are assumed to be present in the model
+  # "rxns","rxnNames","lb","ub","c","rules","subSystems","S"
+
+  fid <- model$forw.idx
+  bid <- model$back.idx
+  lbs <- -model$ub[bid]
+  model <- subset.model(model, j=1:(bid[1]-1))
+  model$lb[fid] <- lbs
+  model$rxns[fid] <- stringr::str_sub(model$rxns[fid], 1, -6) # remove the "_FORW" suffix
+  model$rxnNames[fid] <- stringr::str_sub(model$rxnNames[fid], 1, -6)
   model
 }
 
