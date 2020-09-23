@@ -57,7 +57,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05) {
   # select rxns with signifcant correlations and compute the normalized rxn values
   cor.res <- cor.res[padj<padj.cutoff]
   if (nrow(cor.res)==0) stop("No significant growth-associated reactions with padj<", padj.cutoff, ".") else message("Found ", nrow(cor.res), " growth-associated reactions with padj<", padj.cutoff, ".")
-  mat <- mat[, cor.res$id] * sign(cor.res$rho)
+  mat <- mat[, cor.res$id] * rep(sign(cor.res$rho), each=nrow(mat))
   mat <- do.call(rbind, parallel::mclapply(1:ncol(mat), function(i) {
   	x <- mat[,i]
   	rng <- range(x, na.rm=TRUE)
