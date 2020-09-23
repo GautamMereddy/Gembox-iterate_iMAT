@@ -515,7 +515,7 @@ shrink.model.bounds <- function(model, rxns="default", default.bnd=1e3, bm.epsil
     lid <- intersect(rxns, which(model$lb<0))
   }
   
-  bm.max <- get.opt.fluxes(model, bm.rgx, solv.pars=solv.pars)
+  bm.max <- get.opt.flux(model, bm.rgx, solv.pars=solv.pars)
   if (relative) bm.thres <- bm.max*(1-bm.epsil) else bm.thres <- bm.max - bm.epsil
   # iteratively shrinking the bounds of all rxns (in uid and lid) simultaneously
   ub <- model$ub[uid]
@@ -529,7 +529,7 @@ shrink.model.bounds <- function(model, rxns="default", default.bnd=1e3, bm.epsil
       lb1 <- lb + ss
       lb1[lb1>=0] <- 0
       model$lb[lid] <- lb1
-      bm.max <- get.opt.fluxes(model, bm.rgx, solv.pars=solv.pars)
+      bm.max <- get.opt.flux(model, bm.rgx, solv.pars=solv.pars)
       if (bm.max>=bm.thres) {
         ub <- ub1
         lb <- lb1
