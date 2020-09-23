@@ -21,7 +21,7 @@ prime <- function(model, expr, gr, padj.cutoff=0.05, nc=1L, bm.rgx="biomass", de
   rmax <- get.norm.range.max(model, rxns=prm.rxns$i, range.min=rmin, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
   # compute and set final rxn ub values for each sample
   ubs <- prm.rxns$x * (rmax-rmin) + rmin
-  models <- apply(ubs, 1, function(x) {
+  models <- apply(ubs, 2, function(x) {
   	m <- model
   	m$ub[prm.rxns$i] <- x
   	m
