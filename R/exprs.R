@@ -201,6 +201,7 @@ lee.smallbone <- function(model, expr, sd=1, mode=c(0,1), nc=1L, gap=NULL, agap=
 form.lee.smallbone <- function(model, idx, x, w) {
   # formulate the model of Lee et al.
 
+  n.mets <- nrow(model$S)
   n.rxns <- ncol(model$S)
 
   # formulating the minimization of weighted sum of absolute values \Sum w|v-x|, by adding two slack variables v1, v2 such that v-x=v1-v2, then |v-x| can be expressed as v1+v2
