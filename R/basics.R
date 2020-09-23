@@ -463,11 +463,11 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, rel.
   model
 }
 
-set.biomass.bounds <- function(model, rgx="biomass", lb=NULL, ub=NULL, relative=TRUE) {
+set.biomass.bounds <- function(model, rgx="biomass", lb=NULL, ub=NULL, relative=TRUE, solv.pars=get.pars("lp", list())) {
   # set the lb and/or ub of biomass reaction, rgx is the regex for biomass reaction ID as in model$rxns
 
   bm.idx <- get.biomass.idx(model, rgx)
-  set.rxn.bounds(model, rxns=bm.idx, lbs=lb, ubs=ub, relative=relative)
+  set.rxn.bounds(model, rxns=bm.idx, lbs=lb, ubs=ub, relative=relative, solv.pars=solv.pars)
 }
 
 set.required.rxns <- function(model, rxns, lbs, relative=TRUE) {
