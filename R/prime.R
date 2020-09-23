@@ -47,7 +47,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05) {
   mat[is.nan(mat)] <- NA
 
   # correlation between rxn values and growth rates across samples for each rxn
-  cor.res <- rbindlist(mclapply(1:ncol(mat), function(i){
+  cor.res <- rbindlist(parallel::mclapply(1:ncol(mat), function(i){
   	tryCatch({
   	  a <- cor.test(mat[,i], gr, method="spearman")
   	  data.table(rho=a$estimate, pval=a$p.value)
@@ -58,7 +58,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05) {
   cor.res <- cor.res[padj<padj.cutoff]
   if (nrow(cor.res)==0) stop("No significant growth-associated reactions with padj<", padj.cutoff, ".") else message("Found ", nrow(cor.res), " growth-associated reactions with padj<", padj.cutoff, ".")
   mat <- mat[, cor.res$id] * sign(cor.res$rho)
-  mat <- do.call(rbind, mclpply(1:ncol(mat), function(i) {
+  mat <- do.call(rbind, parallel::mclapply(1:ncol(mat), function(i) {
   	x <- mat[,i]
   	rng <- range(x, na.rm=TRUE)
   	(x-rng[1]) / diff(rng)
@@ -74,7 +74,7 @@ get.norm.range.min <- function(model, bm.lb.rel=0.1, nc=1L, bm.rgx="biomass", so
 
   # get essential rxns: those whose KO decrease biomass by >90% (default)
   bm0 <- get.opt.flux(model, bm.rgx, solv.pars=solv.pars)
-  bms <- unlist(mclapply(1:length(model$rxns), function(i) get.opt.flux(model, bm.rgx, ko=i, solv.pars=solv.pars), mc.cores=nc))
+  bms <- unlist(parallel::mclapply(1:length(model$rxns), function(i) get.opt.flux(model, bm.rgx, ko=i, solv.pars=solv.pars), mc.cores=nc))
   ess.idx <- which(bms<bm.lb.rel*bm0)
   # vmins of essential rxns to support at least biomass.max*0.1 (default)
   m <- set.biomass.bounds(model, rgx=bm.rgx, lb=bm.lb.rel, relative=TRUE, solv.pars=solv.pars)
@@ -91,7 +91,7 @@ get.norm.range.max <- function(model, rxns, range.min, nc=1L, bm.rgx="biomass", 
   # biomass.max under series of ubs for gr.rxns
   bnd <- max(model$ub)
   xs <- seq(range.min, bnd, by=0.1)
-  bms <- unlist(mclapply(xs, function(i) {
+  bms <- unlist(parallel::mclapply(xs, function(i) {
   	m <- set.rxn.bounds(model, rxns, ubs=i)
   	get.opt.flux(m, bm.rgx, solv.pars=solv.pars)
   }, mc.cores=nc))
