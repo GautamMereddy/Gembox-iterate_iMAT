@@ -54,7 +54,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05) {
   mat[is.nan(mat)] <- NA
 
   # correlation between rxn values and growth rates across samples for each rxn
-  cor.res <- rbindlist(parallel::mclapply(1:ncol(mat), function(i){
+  cor.res <- rbindlist(parallel::mclapply(1:ncol(mat), function(i) {
   	tryCatch({
   	  a <- cor.test(mat[,i], gr, method="spearman")
   	  data.table(rho=a$estimate, pval=a$p.value)

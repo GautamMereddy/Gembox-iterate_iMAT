@@ -31,14 +31,16 @@ gimme <- function(model, expr, rmfs="biomass", lbs=0.01, relative=FALSE, norm=TR
   	model <- set.required.rxns(model, rmfs, lbs, relative=relative)
   	rxns <- model$no.set.rxns
   	lbs <- model$no.set.lbs
-  	if ("no.set.rxns" %in% names(model)) model <- model$model
+  	if ("no.set.rxns" %in% names(model)) {
+  	  model <- model$model
+  	  solv.pars <- get.pars("mip", solv.pars)
+  	} else solv.pars <- get.pars("lp", solv.pars)
   } else rxns <- lbs <- NULL
 
   # form model
   gimme.model <- form.gimme(model, w, rxns, lbs)
 
   # solve model and extract results
-  if (any(isrev)) solv.pars <- get.pars("mip", solv.pars) else solv.pars <- get.pars("lp", solv.pars)
   if (mode=="0") {
   	solv.res <- solve.model(gimme.model, pars=solv.pars)[[1]]
   	gimme.model$solver.out <- solv.res
