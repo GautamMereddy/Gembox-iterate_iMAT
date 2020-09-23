@@ -10,16 +10,21 @@ prime <- function(model, expr, gr, padj.cutoff=0.05, nc=1L, bm.rgx="biomass", de
   # return a list of updated models, one for each sample in the corresponding order
 
   solv.pars <- get.pars("lp", solv.pars)
+  message("Preparing base model...")
   # split each reversible rxn into two forward/backward rxns
   model <- convert.rev.rxns(model)
   # shrink rxn bounds
   model <- shrink.model.bounds(model, rxns="default", default.bnd=default.bnd, bm.epsil=bm.epsil, relative=FALSE, min.step.size=min.step.size, bm.rgx=bm.rgx, solv.pars=solv.pars)
   # find growth-associated rxns and compute their rxn-level values for each sample
+  message("Identifying growth-associated reactions...")
   prm.rxns <- get.prime.rxns(model, expr=expr, gr=gr, nc=nc, padj.cutoff=padj.cutoff)
   # compute the lb and ub of the normalization range
+  message("Computing the lower bound of normalization range...")
   rmin <- get.norm.range.min(model, bm.lb.rel=bm.lb.rel, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
+  message("Computing the upper bound of normalization range...")
   rmax <- get.norm.range.max(model, rxns=prm.rxns$i, range.min=rmin, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
   # compute and set final rxn ub values for each sample
+  message("Generating output models...")
   ubs <- prm.rxns$x * (rmax-rmin) + rmin
   models <- apply(ubs, 2, function(x) {
   	m <- model
@@ -27,7 +32,9 @@ prime <- function(model, expr, gr, padj.cutoff=0.05, nc=1L, bm.rgx="biomass", de
   	m
   })
   # recombine splitted reversible rxns
-  lapply(models, revert.rev.rxns)
+  res <- lapply(models, revert.rev.rxns)
+  message("Done.")
+  res
 }
 
 get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05) {
@@ -78,7 +85,7 @@ get.norm.range.min <- function(model, bm.lb.rel=0.1, nc=1L, bm.rgx="biomass", so
   ess.idx <- which(bms<bm.lb.rel*bm0)
   # vmins of essential rxns to support at least biomass.max*0.1 (default)
   m <- set.biomass.bounds(model, rgx=bm.rgx, lb=bm.lb.rel, relative=TRUE, solv.pars=solv.pars)
-  ess.vmins <- get.opt.fluxes(m, rxns=ess.idx, dir="min", nc=nc, solv.pars=solv.pars)
+  suppressMessages(ess.vmins <- get.opt.fluxes(m, rxns=ess.idx, dir="min", nc=nc, solv.pars=solv.pars))
   # max of vmins
   max(ess.vmins)
 }
