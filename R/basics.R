@@ -483,8 +483,8 @@ set.required.rxns <- function(model, rxns, lbs, relative=TRUE) {
   } else rxns <- all2idx(model, rxns)
 
   if (length(lbs)==1) lbs <- rep(lbs, length(rxns))
-  if (relative) lbs <- lbs * get.opt.fluxes(model, rxns, "max")
-  lbs0 <- get.opt.fluxes(model, rxns, "min")
+  if (relative) suppressMessages( lbs <- lbs * get.opt.fluxes(model, rxns, "max") )
+  suppressMessages( lbs0 <- get.opt.fluxes(model, rxns, "min") )
   is.rev <- lbs0 < -lbs
   model$lb[rxns[!is.rev]] <- lbs[!is.rev]
   if (any(is.rev)) {
@@ -519,7 +519,7 @@ shrink.model.bounds <- function(model, rxns="default", default.bnd=1e3, bm.epsil
   if (relative) bm.thres <- bm.max*(1-bm.epsil) else bm.thres <- bm.max - bm.epsil
   # iteratively shrinking the bounds of all rxns (in uid and lid) simultaneously
   ub <- model$ub[uid]
-  lb <- model$lb[uid]
+  lb <- model$lb[lid]
   ss <- default.bnd/10
   while (ss>=min.step.size) {
     repeat {
