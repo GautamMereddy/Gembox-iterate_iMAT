@@ -86,7 +86,7 @@ form.gimme <- function(model, w, rmfs, rmf.lbs) {
   n.rmfs <- length(rmfs)
   if (n.rmfs>0) {
 	S <- rbind(
-	  cbind( S,                            sparseMatrix(NULL, NULL, dims=c(nrow(S), n.rmfs)) )
+	  cbind( S,                            sparseMatrix(NULL, NULL, dims=c(nrow(S), n.rmfs)) ),
 	  cbind( sparseMatrix(1:n.rmfs, rmfs, dims=c(n.rmfs, ncol(S))), Diagonal(n.rmfs, x=1e4) )
   	)
   	rowlb <- c(rowlb, rmf.lbs)
