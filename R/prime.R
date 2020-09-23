@@ -19,7 +19,6 @@ prime <- function(model, expr, gr, padj.cutoff=0.05, nc=1L, bm.rgx="biomass", de
   message("Identifying growth-associated reactions...")
   prm.rxns <- get.prime.rxns(model, expr=expr, gr=gr, nc=nc, padj.cutoff=padj.cutoff)
   # compute the lb and ub of the normalization range
-  message("Computing the lower bound of normalization range...")
   rmin <- get.norm.range.min(model, bm.lb.rel=bm.lb.rel, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
   message("Computing the upper bound of normalization range...")
   rmax <- get.norm.range.max(model, rxns=prm.rxns$i, range.min=rmin, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
@@ -80,10 +79,12 @@ get.norm.range.min <- function(model, bm.lb.rel=0.1, nc=1L, bm.rgx="biomass", so
   # bm.lb.res: biomass lb cutoff relative to biomass.max
 
   # get essential rxns: those whose KO decrease biomass by >90% (default)
+  message("Identifying essential reactions...")
   bm0 <- get.opt.flux(model, bm.rgx, solv.pars=solv.pars)
   bms <- unlist(parallel::mclapply(1:length(model$rxns), function(i) get.opt.flux(model, bm.rgx, ko=i, solv.pars=solv.pars), mc.cores=nc))
   ess.idx <- which(bms<bm.lb.rel*bm0)
   # vmins of essential rxns to support at least biomass.max*0.1 (default)
+  message("Computing the lower bound of normalization range...")
   m <- set.biomass.bounds(model, rgx=bm.rgx, lb=bm.lb.rel, relative=TRUE, solv.pars=solv.pars)
   suppressMessages(ess.vmins <- get.opt.fluxes(m, rxns=ess.idx, dir="min", nc=nc, solv.pars=solv.pars))
   # max of vmins

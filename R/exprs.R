@@ -42,11 +42,13 @@ gimme <- function(model, expr, rmfs="biomass", lbs=0.01, relative=FALSE, norm=TR
 
   # solve model and extract results
   if (mode=="0") {
+  	message("Solving model...")
   	solv.res <- solve.model(gimme.model, pars=solv.pars)[[1]]
   	gimme.model$solver.out <- solv.res
   	v <- solv.res$xopt[1:length(gimme.model$rxns)]
   	res <- list(gimme.model=gimme.model, fluxes=v)
   } else if (mode=="1") {
+  	message("Mode 1. Running FVA...")
   	solv.res <- fva1(gimme.model, nc=nc, gap=gap, agap=agap, keep.solv.out=TRUE, solv.pars=solv.pars)
   	gimme.model$solver.out <- solv.res$solver.out
   	v <- solv.res$solver.out$xopt[1:length(gimme.model$rxns)]
@@ -59,6 +61,7 @@ gimme <- function(model, expr, rmfs="biomass", lbs=0.01, relative=FALSE, norm=TR
   	res <- list(gimme.model=gimme.model, result.model=res.model, fluxes=v)
   }
   
+  message("Done.")
   res
 }
 
@@ -161,6 +164,7 @@ lee.smallbone <- function(model, expr, sd=1, mode=c(0,1), nc=1L, gap=NULL, agap=
   # when mode==1 and samp.pars not NULL, will sample the resulting model
   
   mode <- match.arg(as.character(mode[1]), c("0","1"))
+  solv.pars <- get.pars("lp", solv.pars)
 
   # process expression values
   if (length(sd)==1) sd <- rep(sd, length(expr)) else if (length(sd)!=length(expr)) stop("sd should correspond to expr in the same order.")
@@ -170,11 +174,15 @@ lee.smallbone <- function(model, expr, sd=1, mode=c(0,1), nc=1L, gap=NULL, agap=
 
   # form model and solve iteratively
   nr <- which(model$lb>=0)
+  message("Solving model iteratively...")
+  i <- 1L
   repeat {
+  	message("Iteration # ", i)
   	ls.model <- form.lee.smallbone(model, nr, x[nr], w[nr])
   	solv.res <- fva1(ls.model, rxns=setdiff(1:length(model$rxns), nr), nc=nc, keep.solv.out=TRUE, solv.pars=solv.pars)
   	nr.new <- solv.res$fva.res[vmin>=0,id]
   	if (length(nr.new)==0) break else nr <- c(nr, nr.new)
+  	i <- i+1
   }
   
   # solve model and extract results
@@ -183,6 +191,7 @@ lee.smallbone <- function(model, expr, sd=1, mode=c(0,1), nc=1L, gap=NULL, agap=
   	v <- solv.res$solver.out$xopt[1:length(ls.model$rxns)]
   	res <- list(ls.model=ls.model, fluxes=v)
   } else if (mode=="1") {
+  	message("Mode 1. Running FVA...")
   	solv.res <- fva1(ls.model, nc=nc, gap=gap, agap=agap, keep.solv.out=TRUE, solv.pars=solv.pars)
   	ls.model$solver.out <- solv.res$solver.out
   	v <- solv.res$solver.out$xopt[1:length(ls.model$rxns)]
@@ -194,7 +203,8 @@ lee.smallbone <- function(model, expr, sd=1, mode=c(0,1), nc=1L, gap=NULL, agap=
   	}
   	res <- list(ls.model=ls.model, result.model=res.model, fluxes=v)
   }
-  
+
+  message("Done.")
   res
 }
 
