@@ -79,8 +79,7 @@ fva1 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FA
   # return same as fva(); but if keep.solv.out=TRUE, return list(fva.res, solver.out)
 
   # solve the model to get optimal objective value
-  solv.pars$nsol <- 1
-  solv.pars$PoolSolutions <- 1
+  if (.pkg.var$solver=="rcplex") solv.pars$nsol <- 1 else if (.pkg.var$solver=="gurobi") solv.pars$PoolSolutions <- 1
   solv.out <- solve.model(model, pars=solv.pars)
   if (solv.out[[1]]$stat %in% .pkg.const$infeas.stat) stop("Stopped due to infeasible solution.")
   obj.opt <- solv.out[[1]]$obj
@@ -97,8 +96,7 @@ fva1 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FA
   model.opt <- add.constraint(model, 1:length(model$c), model$c, lb, ub)
 
   # forcing optimal objective value, do fva
-  solv.pars$trace <- 0
-  solv.pars$OutputFlag <- 0
+  if (.pkg.var$solver=="rcplex") solv.pars$trace <- 0 else if (.pkg.var$solver=="gurobi") solv.pars$OutputFlag <- 0
   res <- fva(model.opt, rxns=rxns, nc=nc, solv.pars=solv.pars)
 
   if (keep.solv.out) res <- list(fva.res=res, solver.out=solv.out[[1]])

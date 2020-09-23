@@ -187,8 +187,8 @@ imat.mode1 <- function(imat.model, imat.pars, solv.pars) {
   # the mode 1 of imat (the fva-like approach): solve the iMAT MILP under the forced inactivaton/activation of each rxn, determine (de)activated rxns based on the resulting objective values
   # return a list(solver.out, flux.int.imat), solver.out is a data.table of the optimal iMAT objectives for all rxns, flux.int.imat is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
-  solv.pars$nsol <- 1
-  solv.pars$trace <- 0
+  if (.pkg.var$solver=="rcplex") solv.pars$nsol <- 1 else if (.pkg.var$solver=="gurobi") solv.pars$PoolSolutions <- 1
+  if (.pkg.var$solver=="rcplex") solv.pars$trace <- 0 else if (.pkg.var$solver=="gurobi") solv.pars$OutputFlag <- 0
   rxns <- which(imat.model$var.ind=="v")
   names(rxns) <- imat.model$rxns[rxns]
   obj <- rbindlist(parallel::mclapply(rxns, function(i) {
@@ -235,12 +235,12 @@ imat.mode2 <- function(imat.model, imat.pars, solv.pars) {
   # the mode 2 of imat: similar to mode 1, but after solving the original iMAT MILP, constrain the objective at the optimal value, then for each reaction solve a pair of MILP's to obtain its min/max fluxes
   # return a list(solver.out, flux.int.imat), solver.out is a data.table of the min/max fluxes for all rxns, flux.int.imat is a vector in the order of the model rxns, with values 0/9/1/-1 representing a rxn being inactive, activity level not enforced, active in the forward direction, and active in the backward direction as determined by iMAT
 
-  solv.pars$nsol <- 1
+  if (.pkg.var$solver=="rcplex") solv.pars$nsol <- 1 else if (.pkg.var$solver=="gurobi") solv.pars$PoolSolutions <- 1
   milp.out <- solve.model(imat.model, pars=solv.pars)
   if (milp.out[[1]]$stat %in% .pkg.const$infeas.stat) stop("Stopped due to infeasible solution.")
   obj.opt <- milp.out[[1]]$obj
   imat.model.opt <- add.constraint(imat.model, 1:length(imat.model$c), imat.model$c, obj.opt, obj.opt)
-  solv.pars$trace <- 0
+  if (.pkg.var$solver=="rcplex") solv.pars$trace <- 0 else if (.pkg.var$solver=="gurobi") solv.pars$OutputFlag <- 0
   fva.res <- fva(imat.model.opt, rxns="all", nc=imat.pars$nc, solv.pars=solv.pars)
   fint <- ifelse(fva.res$vmin>=imat.pars$flux.act, 1L, ifelse(fva.res$vmax<= -imat.pars$flux.act, -1L, ifelse(fva.res$vmax<=imat.pars$flux.inact & fva.res$vmin>= -imat.pars$flux.inact, 0L, 9L)))
   # result
