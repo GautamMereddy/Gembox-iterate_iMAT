@@ -2,7 +2,19 @@
 
 In-house toolbox for genome-scale metabolic modeling (GEM) for the Ruppin lab.
 
-This is an R package that implements basic functionality of GEM, as well as several advanced GEM algorithms by our lab including iMAT, MTA and their variations.
+This is an R package that implements GEM functionalities.
+
+### Current Functions
+
+* Query of metabolic model/network data, and basic manipulations of metabolic models
+* FBA, FVA, FCA
+* Simulating reaction knockouts; MOMA
+* Sampling: ACHR
+* Metabolic-EP
+* Incorporating gene expression data: iMAT, PRIME, GIMME, E-Fmin, the method of Lee and Smallbone, and their variations
+* MTA, rMTA and their variations
+* Differential flux analysis and metabolic pathway enrichment analysis
+* Visualization of metabolic network and differential flux results
 
 ### Dependencies
 
