@@ -75,7 +75,7 @@ run.prime <- function(model, prm.rxns, gr, nc=1L, bm.rgx="biomass", bm.lb.rel=0.
   message("Generating output models...")
   mat <- prm.rxns$x[prm.rxns$i,] * prm.rxns$cor[match(prm.rxns$i, id), sign(rho)]
   mat <- do.call(rbind, parallel::mclapply(1:nrow(mat), function(i) {
-  	x <- mat[,i]
+  	x <- mat[i,]
   	rng <- range(x, na.rm=TRUE)
   	(x-rng[1]) / diff(rng)
   }, mc.cores=nc))
