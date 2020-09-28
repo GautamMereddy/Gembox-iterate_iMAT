@@ -45,7 +45,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   	colMeans(expr[i,,drop=FALSE], na.rm=TRUE)
   })
   mat[is.nan(mat)] <- NA
-  if (!is.null(colnames(expr))) colnames(mat) <- colnames(expr)
+  if (!is.null(colnames(expr))) rownames(mat) <- colnames(expr)
 
   # correlation between rxn values and growth rates across samples for each rxn
   cor.res <- rbindlist(parallel::mclapply(1:ncol(mat), function(i) {
