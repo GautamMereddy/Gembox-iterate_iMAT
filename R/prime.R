@@ -14,7 +14,7 @@ prime <- function(model, expr, gr, padj.cutoff=0.05, nc=1L, bm.rgx="biomass", de
   model <- prepare.model.prime(model, default.bnd=default.bnd, bm.epsil=bm.epsil, min.step.size=min.step.size, bm.rgx=bm.rgx, solv.pars=solv.pars)
   message("Identifying growth-associated reactions...")
   prm.rxns <- get.prime.rxns(model, expr=expr, gr=gr, nc=nc, padj.cutoff=padj.cutoff)
-  res <- run.prime(model, prm.rxns=prm.rxns, gr=gr, nc=nc, bm.rgx=bm.rgx, bm.lb.rel=bm.lb.rel, solv.pars=solv.pars)
+  res <- run.prime(model, prm.rxns=prm.rxns, ess.rxns=NULL, gr=gr, nc=nc, bm.rgx=bm.rgx, bm.lb.rel=bm.lb.rel, solv.pars=solv.pars)
 }
 
 prepare.model.prime <- function(model, default.bnd=1e3, bm.epsil=1e-4, min.step.size=0.1, bm.rgx="biomass", solv.pars=get.pars("lp", list())) {
@@ -27,49 +27,66 @@ prepare.model.prime <- function(model, default.bnd=1e3, bm.epsil=1e-4, min.step.
   model <- shrink.model.bounds(model, rxns="default", default.bnd=default.bnd, bm.epsil=bm.epsil, relative=FALSE, min.step.size=min.step.size, bm.rgx=bm.rgx, solv.pars=solv.pars)
 }
 
-get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05) {
+get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, seed=1) {
   # step 2 of PRIME: select growth-associated rxns (i.e. rxns with significant correlation with the provided growth rate data across multiple samples)
   # expr: a gene-by-sample matrix, need to has rownames of gene symbols as those in model$genes (but doesn't need to be of same length or in order)
   # gr: cell growth rate measures across samples, corresponding to the order or columns of expr
   # return list(x, cor, i), x is the all-rxn-by-sample matrix mapped from expr, cor is a data.table containing results of correlation tests, i is the indices of the resulting growth-associated rxns with padj<padj.cutoff
   # this is a separate step and the results are returned as such to allow manual adjustment of selected reactions w/o recomputing the entire correlation
   # manually adjust result with something like: res$i <- res$cor[padj<new.cutoff, id], then pass result to the next step
+  # permut: if>0, then use permutation test to get p value (times of permutation=`permut`), and if seed not NULL, use seeds starting from seed with increment of 1
 
   expr <- expr[match(model$genes, rownames(expr)), ]
   if (all(is.na(expr))) stop ("expr doesn't contain any of the model genes!")
 
   # map gene expr values to rxns values by taking the mean
-  mat <- t(sapply(model$rules, function(x) {
+  mat <- sapply(model$rules, function(x) {
   	i <- as.integer(stringr::str_extract_all(x, "[0-9]+")[[1]])
   	colMeans(expr[i,,drop=FALSE], na.rm=TRUE)
-  }))
+  })
   mat[is.nan(mat)] <- NA
   if (!is.null(colnames(expr))) colnames(mat) <- colnames(expr)
 
   # correlation between rxn values and growth rates across samples for each rxn
-  cor.res <- rbindlist(parallel::mclapply(1:nrow(mat), function(i) {
-  	tryCatch({
-  	  a <- cor.test(mat[i,], gr, method="spearman")
-  	  data.table(rho=a$estimate, pval=a$p.value)
-  	}, error=function(e) data.table(rho=NA, pval=NA))
+  cor.res <- rbindlist(parallel::mclapply(1:ncol(mat), function(i) {
+    tryCatch({
+      a <- cor.test(mat[,i], gr, method="spearman")
+      data.table(rho=a$estimate, pval=a$p.value)
+    }, error=function(e) data.table(rho=NA, pval=NA))
   }, mc.cores=nc), idcol="id")
+
+  if (permut>0) {
+  	tmp <- do.call(cbind, parallel::mclapply(1:permut, function(i) {
+  	  if (!is.null(seed)) set.seed(seed+i-1)
+  	  x <- sample(gr)
+  	  cor(mat, x, method="spearman")
+  	}, mc.cores=nc))
+  	cor.res[, pval:=(rowSums(abs(tmp)>=abs(rho))+1)/(permut+1)]
+  }
+  
   cor.res[, padj:=p.adjust(pval,"BH")]
   tmp <- sum(cor.res$padj<padj.cutoff, na.rm=TRUE)
   if (tmp==0) stop("No significant growth-associated reactions with padj<", padj.cutoff, ".") else message("Found ", tmp, " growth-associated reactions with padj<", padj.cutoff, ".")
 
-  list(x=mat, cor=cor.res, i=cor.res[padj<padj.cutoff, id])
+  list(x=t(mat), cor=cor.res, i=cor.res[padj<padj.cutoff, id])
 }
 
-run.prime <- function(model, prm.rxns, gr, nc=1L, bm.rgx="biomass", bm.lb.rel=0.1, solv.pars=get.pars("lp", list())) {
+run.prime <- function(model, prm.rxns, ess.rxns=NULL, gr, nc=1L, bm.rgx="biomass", bm.lb.rel=0.1, solv.pars=get.pars("lp", list())) {
   # step 3 of PRIME (all the remaining steps)
   # prm.rxns: output from get.prime.rxns
+  # ess.rxns: indices of essential reactions, output from get.essential.rxns(); if NULL, will then call get.essential.rxns()
   # gr: cell growth rate measures across samples, corresponding to the order or columns of mat
   # bm.lb.res passed to get.norm.range.min()
   # return a list of updated models, one for each sample in the corresponding order
 
+  if (is.null(ess.rxns)) {
+  	# get essential rxns: those whose KO decrease biomass by >90% (default)
+  	message("Identifying essential reactions...")
+    ess.rxns <- get.essential.rxns(model, bm.lb.rel=bm.lb.rel, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
+  }
   # compute the lb and ub of the normalization range
-  rmin <- get.norm.range.min(model, bm.lb.rel=bm.lb.rel, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
-  message("Computing the upper bound of normalization range...")
+  message("Computing normalization range...")
+  rmin <- get.norm.range.min(model, ess.rxns=ess.rxns, bm.lb.rel=bm.lb.rel, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
   rmax <- get.norm.range.max(model, rxns=prm.rxns$i, range.min=rmin, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
   # compute and set final rxn ub values for each sample
   message("Generating output models...")
@@ -91,19 +108,14 @@ run.prime <- function(model, prm.rxns, gr, nc=1L, bm.rgx="biomass", bm.lb.rel=0.
   res
 }
 
-get.norm.range.min <- function(model, bm.lb.rel=0.1, nc=1L, bm.rgx="biomass", solv.pars=get.pars("lp", list())) {
+get.norm.range.min <- function(model, ess.rxns, bm.lb.rel=0.1, nc=1L, bm.rgx="biomass", solv.pars=get.pars("lp", list())) {
   # get the lower bound value for the PRIME normalization range
+  # ess.rxns: indices of essential reactions
   # bm.lb.res: biomass lb cutoff relative to biomass.max
 
-  # get essential rxns: those whose KO decrease biomass by >90% (default)
-  message("Identifying essential reactions...")
-  bm0 <- get.opt.flux(model, bm.rgx, solv.pars=solv.pars)
-  bms <- unlist(parallel::mclapply(1:length(model$rxns), function(i) get.opt.flux(model, bm.rgx, ko=i, solv.pars=solv.pars), mc.cores=nc))
-  ess.idx <- which(bms<bm.lb.rel*bm0)
   # vmins of essential rxns to support at least biomass.max*0.1 (default)
-  message("Computing the lower bound of normalization range...")
   m <- set.biomass.bounds(model, rgx=bm.rgx, lb=bm.lb.rel, relative=TRUE, solv.pars=solv.pars)
-  suppressMessages(ess.vmins <- get.opt.fluxes(m, rxns=ess.idx, dir="min", nc=nc, solv.pars=solv.pars))
+  suppressMessages(ess.vmins <- get.opt.fluxes(m, rxns=ess.rxns, dir="min", nc=nc, solv.pars=solv.pars))
   # max of vmins
   max(ess.vmins)
 }

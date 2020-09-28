@@ -103,6 +103,14 @@ fva1 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FA
   res
 }
 
+get.essential.rxns <- function(model, bm.lb.rel=0.1, nc=1L, bm.rgx="biomass", solv.pars=get.pars("lp", list())) {
+  # get the indices of essential reactions: those whose KO reduces biomass by > 1-bm.lb.rel (i.e. biomass_KO < biomass_WT * bm.lb.rel)
+  
+  bm0 <- get.opt.flux(model, bm.rgx, solv.pars=solv.pars)
+  bms <- unlist(parallel::mclapply(1:length(model$rxns), function(i) get.opt.flux(model, bm.rgx, ko=i, solv.pars=solv.pars), mc.cores=nc))
+  ess.idx <- which(bms<bm.lb.rel*bm0)
+}
+
 run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) {
   # a wrapper function to run algorithm `f` under the original wildtype model as well as models where each rxn in rxns is knocked out (i.e. both lb and ub set to 0)
   # model is the formulated model for running the algorithm `f`; it should be derived from the original metabolic model by adding columns and rows to the S matrix, such that indices of the rxns and mets do not change
