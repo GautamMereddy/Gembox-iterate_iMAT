@@ -55,12 +55,18 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   }, mc.cores=nc), idcol="id")
 
   if (permut>0) {
+  	message("")
+  	pb <- round(seq(0.1,0.9,by=0.1)*permut)
+    message("Running permutation tests, progress:\n0%...", appendLF=FALSE)
   	tmp <- do.call(cbind, parallel::mclapply(1:permut, function(i) {
+  	  a <- match(i,pb)
+      if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
   	  if (!is.null(seed)) set.seed(seed+i-1)
   	  x <- sample(gr)
   	  cor(mat, x, method="spearman")
   	}, mc.cores=nc))
   	cor.res[, pval:=(rowSums(abs(tmp)>=abs(rho))+1)/(permut+1)]
+  	message("100%")
   }
   
   cor.res[, padj:=p.adjust(pval,"BH")]
