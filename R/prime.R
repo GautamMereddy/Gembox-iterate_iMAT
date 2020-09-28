@@ -1,19 +1,18 @@
 ###### the PRIME algorithm (Yizhak et al. eLife 2014) ######
 
 
-prime <- function(model, expr, gr, padj.cutoff=0.05, nc=1L, bm.rgx="biomass", default.bnd=1e3, bm.epsil=1e-4, min.step.size=0.1, bm.lb.rel=0.1, solv.pars=list()) {
+prime <- function(model, expr, gr, padj.cutoff=0.05, permut=0, seed=1, nc=1L, bm.rgx="biomass", default.bnd=1e3, bm.epsil=1e-4, min.step.size=0.1, bm.lb.rel=0.1, solv.pars=list()) {
   # function to run PRIME all steps at once
   # expr: a gene-by-sample matrix, need to has rownames of gene symbols as those in model$genes (but doesn't need to be of same length or in order)
   # gr: cell growth rate measures across samples, corresponding to the order or columns of expr
-  # padj.cutoff: used to define significant growth-associated rxns
-  # default.bnd, bm.epsil, min.step.size passed to shrink.model.bounds(); bm.lb.res passed to get.norm.range.min()
+  # padj.cutoff, permut, seed passed to get.prime.rxns; default.bnd, bm.epsil, min.step.size passed to prepare.model.prime(); bm.lb.res passed to run.prime()
   # return a list of updated models, one for each sample in the corresponding order
 
   solv.pars <- get.pars("lp", solv.pars)
   message("Preparing base model...")
   model <- prepare.model.prime(model, default.bnd=default.bnd, bm.epsil=bm.epsil, min.step.size=min.step.size, bm.rgx=bm.rgx, solv.pars=solv.pars)
   message("Identifying growth-associated reactions...")
-  prm.rxns <- get.prime.rxns(model, expr=expr, gr=gr, nc=nc, padj.cutoff=padj.cutoff)
+  prm.rxns <- get.prime.rxns(model, expr=expr, gr=gr, nc=nc, padj.cutoff=padj.cutoff, permut=permut, seed=seed)
   res <- run.prime(model, prm.rxns=prm.rxns, ess.rxns=NULL, gr=gr, nc=nc, bm.rgx=bm.rgx, bm.lb.rel=bm.lb.rel, solv.pars=solv.pars)
 }
 
