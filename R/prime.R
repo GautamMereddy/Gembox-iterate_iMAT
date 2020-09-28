@@ -54,7 +54,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05) {
   	}, error=function(e) data.table(rho=NA, pval=NA))
   }, mc.cores=nc), idcol="id")
   cor.res[, padj:=p.adjust(pval,"BH")]
-  tmp <- sum(cor.res$padj<padj.cutoff)
+  tmp <- sum(cor.res$padj<padj.cutoff, na.rm=TRUE)
   if (tmp==0) stop("No significant growth-associated reactions with padj<", padj.cutoff, ".") else message("Found ", tmp, " growth-associated reactions with padj<", padj.cutoff, ".")
 
   list(x=mat, cor=cor.res, i=cor.res[padj<padj.cutoff, id])
