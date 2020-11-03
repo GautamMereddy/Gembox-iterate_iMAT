@@ -36,7 +36,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   # permut: if>0, then use permutation test to get p value (times of permutation=`permut`), and if seed not NULL, use seeds starting from seed with increment of 1
 
   expr <- expr[match(model$genes, rownames(expr)), ]
-  if (all(is.na(expr))) stop ("expr doesn't contain any of the model genes!")
+  if (all(is.na(expr))) stop("expr doesn't contain any of the model genes!")
 
   # map gene expr values to rxns values by taking the mean
   mat <- sapply(model$rules, function(x) {
@@ -55,7 +55,6 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   }, mc.cores=nc), idcol="id")
 
   if (permut>0) {
-  	message("")
   	pb <- round(seq(0.1,0.9,by=0.1)*permut)
     message("Running permutation tests, progress:\n0%...", appendLF=FALSE)
   	tmp <- do.call(cbind, parallel::mclapply(1:permut, function(i) {
@@ -71,7 +70,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   
   cor.res[, padj:=p.adjust(pval,"BH")]
   tmp <- sum(cor.res$padj<padj.cutoff, na.rm=TRUE)
-  if (tmp==0) stop("No significant growth-associated reactions with padj<", padj.cutoff, ".") else message("Found ", tmp, " growth-associated reactions with padj<", padj.cutoff, ".")
+  if (tmp==0) warning("No significant growth-associated reactions with padj<", padj.cutoff, ".") else message("Found ", tmp, " growth-associated reactions with padj<", padj.cutoff, ".")
 
   list(x=t(mat), cor=cor.res, i=cor.res[padj<padj.cutoff, id])
 }
