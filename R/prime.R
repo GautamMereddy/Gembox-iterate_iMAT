@@ -1,19 +1,26 @@
 ###### the PRIME algorithm (Yizhak et al. eLife 2014) ######
 
 
-prime <- function(model, expr, gr, padj.cutoff=0.05, permut=0, seed=1, nc=1L, bm.rgx="biomass", default.bnd=1e3, bm.epsil=1e-4, min.step.size=0.1, bm.lb.rel=0.1, solv.pars=list()) {
+prime <- function(model, expr, gr, ess.rxns=NULL, grps=NULL, padj.cutoff=0.05, permut=0, seed=1, nc=1L, bm.rgx="biomass", default.bnd=1e3, bm.epsil=1e-4, min.step.size=0.1, bm.lb.rel=0.1, solv.pars=list()) {
   # function to run PRIME all steps at once
   # expr: a gene-by-sample matrix, need to has rownames of gene symbols as those in model$genes (but doesn't need to be of same length or in order)
   # gr: cell growth rate measures across samples, corresponding to the order or columns of expr
+  # ess.rxns: indices or IDs of essential reactions as in the original model (not after prepare.model.prime()); if NULL, will then call get.essential.rxns()
+  # grps: if not NULL, a vector corresponding to the samples labeling their groups, then will generate one model per group (by taking the mean) instead of one model per sample
   # padj.cutoff, permut, seed passed to get.prime.rxns; default.bnd, bm.epsil, min.step.size passed to prepare.model.prime(); bm.lb.res passed to run.prime()
   # return a list of updated models, one for each sample in the corresponding order
 
   solv.pars <- get.pars("lp", solv.pars)
+  ess.rxns <- all2idx(model, ess.rxns)
   message("Preparing base model...")
   model <- prepare.model.prime(model, default.bnd=default.bnd, bm.epsil=bm.epsil, min.step.size=min.step.size, bm.rgx=bm.rgx, solv.pars=solv.pars)
   message("Identifying growth-associated reactions...")
   prm.rxns <- get.prime.rxns(model, expr=expr, gr=gr, nc=nc, padj.cutoff=padj.cutoff, permut=permut, seed=seed)
-  res <- run.prime(model, prm.rxns=prm.rxns, ess.rxns=NULL, gr=gr, nc=nc, bm.rgx=bm.rgx, bm.lb.rel=bm.lb.rel, solv.pars=solv.pars)
+  if (!is.null(ess.rxns)) {
+  	tmp <- model$forw.idx %in% ess.rxns
+  	ess.rxns <- c(ess.rxns, model$back.idx[tmp])
+  }
+  res <- run.prime(model, prm.rxns=prm.rxns, ess.rxns=ess.rxns, grps=grps, nc=nc, bm.rgx=bm.rgx, bm.lb.rel=bm.lb.rel, solv.pars=solv.pars)
 }
 
 prepare.model.prime <- function(model, default.bnd=1e3, bm.epsil=1e-4, min.step.size=0.1, bm.rgx="biomass", solv.pars=get.pars("lp", list())) {
@@ -75,37 +82,48 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   list(x=t(mat), cor=cor.res, i=cor.res[padj<padj.cutoff, id])
 }
 
-run.prime <- function(model, prm.rxns, ess.rxns=NULL, gr, nc=1L, bm.rgx="biomass", bm.lb.rel=0.1, solv.pars=get.pars("lp", list())) {
+run.prime <- function(model, prm.rxns, ess.rxns=NULL, grps=NULL, nc=1L, bm.rgx="biomass", bm.lb.rel=0.1, solv.pars=get.pars("lp", list())) {
   # step 3 of PRIME (all the remaining steps)
   # prm.rxns: output from get.prime.rxns
-  # ess.rxns: indices of essential reactions, output from get.essential.rxns(); if NULL, will then call get.essential.rxns()
-  # gr: cell growth rate measures across samples, corresponding to the order or columns of mat
+  # ess.rxns: indices or IDs of essential reactions; if NULL, will then call get.essential.rxns()
+  # grps: if not NULL, a vector corresponding to the samples labeling their groups, then will generate one model per group (by taking the mean) instead of one model per sample
   # bm.lb.res passed to get.norm.range.min()
   # return a list of updated models, one for each sample in the corresponding order
 
+  ess.rxns <- all2idx(model, ess.rxns)
   if (is.null(ess.rxns)) {
   	# get essential rxns: those whose KO decrease biomass by >90% (default)
   	message("Identifying essential reactions...")
     ess.rxns <- get.essential.rxns(model, bm.lb.rel=bm.lb.rel, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
   }
+
   # compute the lb and ub of the normalization range
   message("Computing normalization range...")
   rmin <- get.norm.range.min(model, ess.rxns=ess.rxns, bm.lb.rel=bm.lb.rel, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
   rmax <- get.norm.range.max(model, rxns=prm.rxns$i, range.min=rmin, nc=nc, bm.rgx=bm.rgx, solv.pars=solv.pars)
+
   # compute and set final rxn ub values for each sample
   message("Generating output models...")
   mat <- prm.rxns$x[prm.rxns$i,] * prm.rxns$cor[match(prm.rxns$i, id), sign(rho)]
+  if (!is.null(grps)) {
+  	tmp <- unique(grps)
+  	names(tmp) <- tmp
+  	rng <- apply(mat, 1, range, na.rm=TRUE) # still use the orginal range if with grouping
+  	mat <- sapply(tmp, function(x) rowMeans(mat[,grps==x], na.rm=TRUE))
+  } else rng <- apply(mat, 1, range, na.rm=TRUE)
+
   mat <- do.call(rbind, parallel::mclapply(1:nrow(mat), function(i) {
   	x <- mat[i,]
-  	rng <- range(x, na.rm=TRUE)
-  	(x-rng[1]) / diff(rng)
+  	(x-rng[1,i]) / diff(rng[,i])
   }, mc.cores=nc))
   ubs <- mat * (rmax-rmin) + rmin
+
   models <- apply(ubs, 2, function(x) {
   	m <- model
   	m$ub[prm.rxns$i] <- x
   	m
   })
+
   # recombine splitted reversible rxns
   res <- lapply(models, revert.rev.rxns)
   message("Done.")
