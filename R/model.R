@@ -291,3 +291,143 @@ set.cell.fractions <- function(model.sc, model.mc, cell.fracs, nc=1L) {
   res
 }
 
+join.models <- function(..., cell.fracs=1, nc=1L) {
+  # join several models provided in ... into a conjunct multicellular model, where the cells share the extracellular space (metabolites and reactions in there)
+  # all models in ... need to be based on the same base model, i.e. these models differ only by the reaction bound values
+  # cell.fracs: a vector of cell fractions of the models, in the corresponding order, will rescale such that the total is 1; default 1 means each model will have fraction 1/n; reaction bounds will be adjusted based on the rescaled cell.fracs
+  # nc: number of cores used by fva()
+  # model should contain at least the fields below in proper formats:
+  fields <- c("rxns", "mets", "S", "lb", "ub", "rowlb", "rowub", "genes", "rules", "c")
+
+  models <- list(...)
+  ncells <- length(models)
+  for (m in models) {
+    # check for necessary fields
+    tmp <- !fields %in% names(m)
+    if (any(tmp)) stop("These necessary items are missing in the model: ", paste0(fields[tmp], collapse=", "), ".")
+  }
+
+  # rescale model bounds based on cell.fracs
+  if (length(cell.fracs)==1) cell.fracs <- rep(1, ncells) else if (length(cell.fracs)!=ncells) stop("length of cell.fracs not equal to the number of provided models.")
+  cell.fracs <- cell.fracs/sum(cell.fracs)
+  models <- lapply(1:ncells, function(i) {
+    m <- models[[i]]
+    bnds <- fva(m, nc=nc)
+    m$lb <- bnds$vmin*cell.fracs[i]
+    m$ub <- bnds$vmax*cell.fracs[i]
+    m
+  })
+  
+  res <- models[[1]]
+
+  # mets in the extracellular space (emet.ids)
+  tmp <- grepl("\\[e\\]$|_e$", res$mets)
+  emet.ids <- which(tmp)
+  # and the rest (i.e. intracellular)
+  imet.ids <- which(!tmp)
+  # cell compartment info of mets
+  res$met.cell.ids <- ifelse(tmp, "e", "cell1") # first model as cell 1
+
+  # exclusively extracellular reactions, these include the extracellular boundary reactions (those with names EX_.*, and equations like "xxx[e]-->") and those involving only extracellular metabolites
+  tmp <- apply(res$S, 2, function(x) all(which(x!=0) %in% emet.ids))
+  erxn.ids <- which(tmp)
+  # and the rest
+  not.erxn.ids <- which(!tmp)
+  # cell compartment info of mets
+  res$rxn.cell.ids <- ifelse(tmp, "e", "cell1") # first model as cell 1
+
+  # add these info too
+  res$imet.ids <- imet.ids
+  res$emet.ids <- emet.ids
+  res$irxn.ids <- not.erxn.ids
+  res$erxn.ids <- erxn.ids
+
+  # label the first model as cell1
+  tmpf <- function(a, b="not.erxn.ids") {
+    if (a %in% names(res)) {
+      if (is.null(b)) {
+        res[[a]] <<- paste0(res[[a]], "_cell1")
+      } else {
+        b <- get(b)
+        res[[a]][b] <<- paste0(res[[a]][b], "_cell1")
+      }
+    }
+  }
+  for (i in c("rxns","rxnNames","subSystems")) tmpf(i)
+  for (i in c("mets","metNames")) tmpf(i, "imet.ids")
+  for (i in c("genes","gene.ids")) tmpf(i, NULL)
+
+  # function for adding one cell at a time
+  add.cell <- function(i) {
+    model <- models[[i]]
+
+    # 1. simple concatenation or concatenation with added suffix indicating cell index
+    tmpf <- function(a, b="not.erxn.ids", sfx=TRUE) {
+      if (a %in% names(model)) {
+        if (sfx) {
+          sfx <- paste0("_cell",i)
+          if (is.null(b)) {
+            res[[a]] <<- c(res[[a]], paste0(model[[a]], sfx))
+          } else {
+            b <- get(b)
+            res[[a]] <<- c(res[[a]], paste0(model[[a]][b], sfx))
+          }
+        } else {
+          if (is.null(b)) {
+            res[[a]] <<- c(res[[a]], model[[a]])
+          } else {
+            b <- get(b)
+            res[[a]] <<- c(res[[a]], model[[a]][b])
+          }
+        }
+      }
+      NULL
+    }
+    for (x in c("lb","ub","c")) tmpf(x, sfx=FALSE)
+    for (x in c("metFormulas","rowlb","rowub","b")) tmpf(x, "imet.ids", FALSE)
+    for (x in c("rxns","rxnNames","subSystems")) tmpf(x)
+    for (x in c("mets","metNames")) tmpf(x, "imet.ids")
+    for (x in c("genes","gene.ids")) tmpf(x, NULL)
+    # for lb and ub of erxn.ids, and rowlb, rowub and b of emet.ids, treat as additive
+    # the additive lb and ub is due to the consideration that all rxn bounds for each cell have been adjusted based on cell.fracs
+    res$lb[erxn.ids] <<- res$lb[erxn.ids] + model$lb[erxn.ids]
+    res$ub[erxn.ids] <<- res$ub[erxn.ids] + model$ub[erxn.ids]
+    res$rowlb[emet.ids] <<- res$rowlb[emet.ids] + model$rowlb[emet.ids]
+    res$rowub[emet.ids] <<- res$rowub[emet.ids] + model$rowub[emet.ids]
+    if ("b" %in% names(model)) res$b[emet.ids] <<- res$b[emet.ids] + model$b[emet.ids]
+    # cell compartment info
+    res$rxn.cell.ids <<- c(res$rxn.cell.ids, rep(paste0("cell",i), length(not.erxn.ids)))
+    res$met.cell.ids <<- c(res$met.cell.ids, rep(paste0("cell",i), length(imet.ids)))
+
+    # 2. S matrix
+    # the order of reactions is as above; for the (a) part, the matrix is just the original S unchanged but added more rows of zeros for the intracellular metabolites of the second cell; for the (b) part, the matrix is based on the not.erxn.ids columns of the original S matrix just with the rows corresponding to imet.ids "cut and pasted" to bottom
+    # this is the (b) part:
+    tmp <- res$S[, not.erxn.ids]
+    tmp[imet.ids, ] <- 0
+    tmp <- rbind(tmp, model$S[imet.ids, not.erxn.ids])
+    # cbind (a) and (b)
+    res$S <<- cbind(rbind(res$S, sparseMatrix(NULL, NULL, dims=c(length(imet.ids),ncol(res$S)))), tmp)
+
+    # 3. rules (not using "grRules" or "rxnGeneMat", and these are also not included in the resulting model)
+    # just need to correct the gene indices for the added cell
+    tmp <- model$rules[not.erxn.ids]
+    tmp <- stringr::str_replace_all(tmp, "[0-9]+", function(x) {
+      x <- as.integer(x)
+      x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
+    })
+    res$rules <<- c(res$rules, tmp)
+    # for erxn.ids that are mapped to genes, then need to recreate rules for these reactions as sth like "(rules.cell1) | (rules.cell2)"
+    tmp <- rxns2genes(model, erxn.ids)
+    dupg.erxn.ids <- erxn.ids[sapply(tmp, length)!=0]
+    tmp <- stringr::str_replace_all(model$rules[dupg.erxn.ids], "[0-9]+", function(x) {
+      x <- as.integer(x)
+      x+length(res$genes)-length(model$genes) # need to -length(model$genes) because at this point the genes from the last cell have already been added to res$genes
+    })
+    res$rules[dupg.erxn.ids] <<- paste0("(",res$rules[dupg.erxn.ids],") | (",tmp,")")
+  }
+
+  # add the remaining (n-1) cells
+  for (i in 2:ncells) add.cell(i)
+
+  res
+}
