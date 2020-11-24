@@ -74,7 +74,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
         if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
   	    if (!is.null(seed)) set.seed(seed+i-1)
         a <- Rfast::permcor(mat1[,idx[i]], gr1, R=permut)
-        data.table(rho=a$cor, pval=a$p-value)
+        data.table(rho=a["cor"], pval=a["p-value"])
       }, error=function(e) data.table(rho=NA, pval=NA))
     }, mc.cores=nc))
     cor.res <- rbind(cbind(id=idx, cor.res), data.table(id=which(any.na), rho=NA, pval=NA))[order(id)]
