@@ -30,5 +30,6 @@ Suggests:
     RColorBrewer,
     visNetwork,
     hypergraph,
-    hyperdraw
+    hyperdraw,
+    Rfast
 SystemRequirements: C++11
