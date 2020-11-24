@@ -88,6 +88,8 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   }
   
   if (permut>0 && !use.rfast) {
+  	mat1 <- apply(mat, 2, frank, na.last="keep")
+  	gr1 <- frank(gr, na.last="keep")
   	pb <- round(seq(0.1,0.9,by=0.1)*permut)
     message("Running permutation tests, progress:\n0%...", appendLF=FALSE)
   	tmp <- do.call(cbind, parallel::mclapply(1:permut, function(i) {
