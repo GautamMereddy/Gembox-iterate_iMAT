@@ -127,6 +127,7 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
   if (!is.null(fluxes)) {
     fluxes <- fluxes[tmp]
     fluxes[is.na(fluxes)] <- 0
+    dirs[fluxes>=0] <- 1
     dirs[fluxes<0] <- -1
     v <- abs(fluxes)
     rxn.equs <- get.rxn.equations(model, rxn.ids, dir=fluxes, use.names=TRUE)
