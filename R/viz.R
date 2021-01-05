@@ -203,8 +203,8 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
     if (met.lab=="id") ml <- mets[mi]
       else if (met.lab=="name") ml <- met.ns[mi]
       else if (met.lab=="") ml <- ""
-    if (rxn.lab=="id") rl <- rxns[mi]
-      else if (rxn.lab=="name") rl <- rxn.ns[mi]
+    if (rxn.lab=="id") rl <- rxns[i]
+      else if (rxn.lab=="name") rl <- rxn.ns[i]
       else if (rxn.lab=="") rl <- ""
     nd <- data.table(id=c(mets.i, rxns[i]), label=c(ml, rl),
                      title=c(met.ns[mi], sprintf("<p><b>%s</b><br>%s<br>v=%.4g<br>dv=%.4g</p>",rxn.ns[i],rxn.equs[i],ifelse(is.null(v[i]),NA,v[i]),ifelse(is.null(dfluxes[i]),NA,dfluxes[i]))),
