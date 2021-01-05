@@ -73,7 +73,7 @@ map.colors <- function(x, cols=c("blue2","grey70","red2"), trim=FALSE, lims=NULL
 }
 
 
-plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", rxn.lab=c("id","name",""), met.lab=c("id","name",""), use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c(FALSE,TRUE,"flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=1, width=NULL, height=NULL) {
+plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", rxn.lab=c("id","name","none"), met.lab=c("id","name","none"), use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c(FALSE,TRUE,"flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=1, width=NULL, height=NULL) {
   # generate an interactive network plot for a metabolic model, can also incorporate fluxes and dfluxes data
   # model: the base metabolic model
   # rxns: reactions to plot; mets: metabolites to include in the plot; if provide rxns but not mets, default to mets in the rxns, vice versa
@@ -202,10 +202,10 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
     # node (both mets and rxn) info
     if (met.lab=="id") ml <- mets[mi]
       else if (met.lab=="name") ml <- met.ns[mi]
-      else if (met.lab=="") ml <- ""
+      else if (met.lab=="none") ml <- ""
     if (rxn.lab=="id") rl <- rxns[i]
       else if (rxn.lab=="name") rl <- rxn.ns[i]
-      else if (rxn.lab=="") rl <- ""
+      else if (rxn.lab=="none") rl <- ""
     nd <- data.table(id=c(mets.i, rxns[i]), label=c(ml, rl),
                      title=c(met.ns[mi], sprintf("<p><b>%s</b><br>%s<br>v=%.4g<br>dv=%.4g</p>",rxn.ns[i],rxn.equs[i],ifelse(is.null(v[i]),NA,v[i]),ifelse(is.null(dfluxes[i]),NA,dfluxes[i]))),
                      group=c(rep("met", sum(mi)), "rxn"))
