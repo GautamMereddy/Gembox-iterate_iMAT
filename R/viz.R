@@ -73,7 +73,7 @@ map.colors <- function(x, cols=c("blue2","grey70","red2"), trim=FALSE, lims=NULL
 }
 
 
-plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c(FALSE,TRUE,"flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=1, width=NULL, height=NULL) {
+plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", rxn.lab=c("id","name",""), met.lab=c("id","name",""), use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c(FALSE,TRUE,"flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=1, width=NULL, height=NULL) {
   # generate an interactive network plot for a metabolic model, can also incorporate fluxes and dfluxes data
   # model: the base metabolic model
   # rxns: reactions to plot; mets: metabolites to include in the plot; if provide rxns but not mets, default to mets in the rxns, vice versa
@@ -81,10 +81,11 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
   # dfluxes: the values of flux changes corresponding to the reactions in rxns
   # exclude.mets.rgx: regex for names of metabolites (as in model$mets) to be excluded from the plots; the default regex works for some of the high-degree mets in recon1 and iMM1415
   # dup.mets.rgx: after keeping the mets in mets.ids and excluding those in exclude.mets.rgx, for the remaining mets, use dup.mets to specify regex of mets to be plot as separate nodes for each reaction, when they are recurrent in multiple reactions; the default is the same as exclude.mets, so these will be excluded; to duplicate these instead of removing them, set exclude.mets to NULL
+  # rxn.lab and met.lab: label the rxn or met with id or names or nothing
   # use.aes: use line color, or line width, or both; for dfluxes, width can only represent magnitude; if both fluxes and dfluxes are given, then will always use line width for flux and color for dflux
   # abs.dflux: whether to treat dfluxes as change in absolute fluxes (i.e. magnitude of fluxes) or "raw" changes (i.e. dependent on the direction of reactions); if FALSE and also plotting fluxes, for reversible reactions the color will be adjusted accordingly, if FALSE and not plotting fluxes, the dfluxes of reversible reactions will always be plotted using the "positive" colors and the arrows of the reactions will correspond to the direction of change
   # cols: a vector of colors for negative -> positive values if plotting dfluxes; if plotting fluxes, the mid-point color and right-half of the colors will be used for low -> high fluxes
-  # lwds: a vector of length 2, range of line widths
+  # lwds: a vector of length 2, range of line widths; the first element will be used for all line widths if use.aes does not include "width" or if all values to be plotted by width are the same
   # label.value: whether to print the flux or dflux values in the visualization; if TRUE, use whichever is available; if both are available, have to specify which
   # layout: graph layout for visNetwork::visIgraphLayout
   # seed: random seed for layout
@@ -94,6 +95,8 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
     stop("Package \"visNetwork\" needed for this function to work.")
   }
 
+  rxn.lab <- match.arg(rxn.lab)
+  met.lab <- match.arg(met.lab)
   use.aes <- match.arg(use.aes)
   label.value <- match.arg(label.value)
   layout <- match.arg(layout)
@@ -153,7 +156,7 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
     x[x<lb] <- lb
     x[x>ub] <- ub
     if (uniqueN(x)==1) {
-      res <- rep(1, length(x))
+      res <- rep(lwds[1], length(x))
     } else {
       res <- x / diff(range(x)) * diff(lwds)
       res <- res - min(res) + lwds[1]
@@ -176,15 +179,15 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
       lwds <- maplw(v, lwds)
     } else {
       if (use.aes %in% c("color","both")) cols <- map.colors(dfluxes, cols=cols, trim=TRUE, mid=0) else cols <- rep("#666666", length(rxns)) # grey40
-      if (use.aes %in% c("width","both")) lwds <- maplw(abs(dfluxes), lwds) else lwds <- rep(8, length(rxns))
+      if (use.aes %in% c("width","both")) lwds <- maplw(abs(dfluxes), lwds) else lwds <- rep(lwds[1], length(rxns))
     }
   } else {
     if (!is.null(fluxes)) {
       if (use.aes %in% c("color","both")) cols <- map.colors(v, cols=cols, trim=TRUE, mid=0) else cols <- rep("#666666", length(rxns)) # grey40
-      if (use.aes %in% c("width","both")) lwds <- maplw(v, lwds) else lwds <- rep(8, length(rxns))
+      if (use.aes %in% c("width","both")) lwds <- maplw(v, lwds) else lwds <- rep(lwds[1], length(rxns))
     } else {
       cols <- rep("#1A1A1A", length(rxns)) # grey10
-      lwds <- rep(2, length(rxns))
+      lwds <- rep(lwds[1], length(rxns))
     }
   }
 
@@ -197,7 +200,13 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
     rs <- mets.i[x[mi]<0] # reactants
     ps <- mets.i[x[mi]>0] # products
     # node (both mets and rxn) info
-    nd <- data.table(id=c(mets.i, rxns[i]), label=c(mets[mi], rxns[i]),
+    if (met.lab=="id") ml <- mets[mi]
+      else if (met.lab=="name") ml <- met.ns[mi]
+      else if (met.lab=="") ml <- ""
+    if (rxn.lab=="id") rl <- rxns[mi]
+      else if (rxn.lab=="name") rl <- rxn.ns[mi]
+      else if (rxn.lab=="") rl <- ""
+    nd <- data.table(id=c(mets.i, rxns[i]), label=c(ml, rl),
                      title=c(met.ns[mi], sprintf("<p><b>%s</b><br>%s<br>v=%.4g<br>dv=%.4g</p>",rxn.ns[i],rxn.equs[i],ifelse(is.null(v[i]),NA,v[i]),ifelse(is.null(dfluxes[i]),NA,dfluxes[i]))),
                      group=c(rep("met", sum(mi)), "rxn"))
     # edge from reactants to reaction
