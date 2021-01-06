@@ -73,7 +73,13 @@ map.colors <- function(x, cols=c("blue2","grey70","red2"), trim=FALSE, lims=NULL
 }
 
 
-plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, exclude.mets.rgx="default", dup.mets.rgx="default", rxn.lab=c("id","name","none"), met.lab=c("id","name","none"), rxn.lab.size=36, met.lab.size=30, use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20), label.value=c(FALSE,TRUE,"flux","dflux"), layout=c("","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"), seed=1, width=NULL, height=NULL) {
+plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL,
+  mets=NULL, exclude.mets=NULL, exclude.mets.rgx="default", dup.mets=NULL, dup.mets.rgx="default",
+  rxn.lab=c("id","name","none"), met.lab=c("id","name","none"), rxn.lab.size=36, met.lab.size=30,
+  use.aes=c("both","color","width"), abs.dflux=FALSE, cols=c("blue2","grey70","red2"), lwds=c(5,20),
+  label.value=c(FALSE,TRUE,"flux","dflux"),
+  layout=c("none","layout_with_fr","layout_nicely","layout_randomly","layout_as_star","layout_as_tree","layout_as_bipartite","layout_in_circle","layout_on_sphere","layout_on_grid","layout_with_dh","layout_with_gem","layout_with_graphopt","layout_with_kk","layout_with_lgl","layout_with_mds","layout_with_sugiyama"),
+  seed=1, width=NULL, height=NULL) {
   # generate an interactive network plot for a metabolic model, can also incorporate fluxes and dfluxes data
   # model: the base metabolic model
   # rxns: reactions to plot; mets: metabolites to include in the plot; if provide rxns but not mets, default to mets in the rxns, vice versa
@@ -105,13 +111,13 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
 
   # mets
   if (is.null(mets)) met.ids <- unique(unlist(rxns2mets(model, rxns))) else met.ids <- all2idx(model, mets)
-  rm.mets <- get.exclude.mets(model, mets=NULL, rgx=exclude.mets.rgx, degree=ncol(model$S))
+  rm.mets <- unique(c(get.exclude.mets(model, mets=NULL, rgx=exclude.mets.rgx, degree=ncol(model$S)), all2idx(model, exclude.mets)))
   met.ids <- setdiff(met.ids, rm.mets)
   mets <- model$mets[met.ids]
   tmp <- stringr::str_match(mets, "[\\[_](.)\\]?$")[,2]
   tmp <- paste0("[",stringr::str_sub(tmp,1,1),"]")
   met.ns <- paste0(model$metNames[met.ids], tmp)
-  dup.mets <- get.exclude.mets(model, mets=NULL, rgx=dup.mets.rgx, degree=ncol(model$S))
+  dup.mets <- unique(c(get.exclude.mets(model, mets=NULL, rgx=dup.mets.rgx, degree=ncol(model$S)), all2idx(model, dup.mets)))
   md.ids <- intersect(met.ids, dup.mets)
 
   # rxns
@@ -240,7 +246,7 @@ plot.model <- function(model, rxns=NULL, fluxes=NULL, dfluxes=NULL, mets=NULL, e
     visNetwork::visGroups(groupname="met", shape="dot", size=15, color=list(border="#1A1A1A", background="#4169E1"), borderWidth=1.5, font=list(size=met.lab.size, color="#000000")) %>% # grey10; background royalblue
     visNetwork::visGroups(groupname="rxn", shape="text", font=list(size=rxn.lab.size, color="#000000")) %>%
     visNetwork::visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, collapse=TRUE)
-  if (layout=="") vis <- vis %>% visNetwork::visLayout(randomSeed=seed) else vis <- vis %>% visNetwork::visIgraphLayout(layout=layout, randomSeed=seed)
+  if (layout=="none") vis <- vis %>% visNetwork::visLayout(randomSeed=seed) else vis <- vis %>% visNetwork::visIgraphLayout(layout=layout, randomSeed=seed)
   vis
 }
 
