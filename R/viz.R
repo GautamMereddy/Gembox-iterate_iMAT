@@ -507,3 +507,76 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
   p
 }
 
+
+plot.met.fluxes2 <- function(model0, model1, mets, group.names=c("Control","Treated"), met.names=NULL, ylab="Total Flux", ylims=NULL, nr=1, nsamples=4e3) {
+  # plot the distributions of total flux through metabolites of two groups, given as group-specific models in model0 and model1; sample points need to be in the models
+  # mets: metabolites; if more than one, will plot in separate facets
+  # group.names: names of the two groups; met.names: names of mets in order, if null will use mets IDs
+  # ylab: y-axis title text; ylims: if not NULL, can be a vector c(ymin,ymax) or a list of such vectors corresponding to the order of mets; some elements of the list can also be NULL, meaning not setting for the corresponding metabolite
+  # nr: number of rows if multiple facets
+  # nsamples: number of samples to use from the end of samples
+  
+  if (!requireNamespace(c("ggplot2","RColorBrewer"), quietly=TRUE)) {
+    stop("Packages \"ggplot2\" and \"RColorBrewer\" needed for this function to work.")
+  }
+  # if calling this function, attach these packages
+  library(ggplot2)
+  library(RColorBrewer)
+  
+  mets <- all2idx(model0, mets)
+  names(mets) <- model0$mets[mets]
+  if (is.null(met.names)) met.names <- names(mets)
+
+  tmpf <- function(m, i) {
+    ns <- ncol(m$sample$pnts)
+    if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
+    x <- abs(m$S[mets,,drop=FALSE]) %*% abs(m$sample$pnts[, (ns-nsamples+1):ns]) / 2
+    res <- data.table(grp=group.names[i+1], met=rep(met.names,each=nsamples), v=as.vector(x))
+    res1 <- data.table(grp=group.names[i+1], met=met.names, v=Matrix::rowMeans(x, na.rm=TRUE))
+    list(res, res1)
+  }
+  tmp <- tmpf(model0,0)
+  tmp1 <- tmpf(model1,1)
+  dat <- rbind(tmp[[1]], tmp1[[1]])
+  dat[, grp:=factor(grp, levels=group.names)]
+  dat[, met:=factor(met, levels=met.names)]
+  dat1 <- rbind(tmp[[2]], tmp1[[2]])
+  dat1[, grp:=factor(grp, levels=group.names)]
+  dat1[, met:=factor(met, levels=met.names)]
+  blk <- dat[, .(vbnd=c(1.1*min(v)-0.1*max(v), 1.1*max(v)-0.1*min(v)), grp=grp[1]), by=met]
+
+  if (is.list(ylims)) {
+    names(ylims) <- met.names
+    for (i in names(ylims)) {
+      if (!is.null(ylims[[i]])) blk[met==i, vbnd:=ylims[[i]]]
+    }
+  } else if (!is.null(ylims)) {
+    blk <- data.table(met=rep(met.names,each=2), vbnd=ylims, grp=group.names[1]) # grp is just place-holder
+  }
+  blk[, grp:=factor(grp, levels=group.names)]
+  blk[, met:=factor(met, levels=met.names)]
+  
+  p <- ggplot(dat, aes(x=grp, y=v, color=grp, fill=grp)) + ylab(ylab)
+  if (length(met.names)>1) p <- p + facet_wrap(~met, scales="free_y", nrow=nr)
+  p <- p + geom_violin(scale="width", width=0.6, color="grey20") +
+    geom_point(data=dat1, aes(x=grp, y=v), size=1) +
+    geom_blank(data=blk, aes(y=vbnd)) +
+    scale_color_brewer(palette="Set1") +
+    scale_fill_brewer(palette="Pastel1") +
+    theme_classic() +
+    theme(
+      axis.title.x=element_blank(),
+      axis.text.x=element_blank(),
+      axis.title.y=element_text(size=10),
+      axis.text.y=element_text(size=8),
+      strip.text.x=element_text(size=8),
+      legend.title=element_blank(),
+      legend.text=element_text(size=8),
+      legend.position="bottom",
+      legend.box.margin=margin(-8,0,0,0),
+      legend.key.width=unit(0.4,"line"),
+      legend.key.height=unit(0.4,"line")
+    )
+  p
+}
+
