@@ -3,10 +3,11 @@
 
 ### --- metal --- ###
 
-metal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
+metal <- function(model, flux0, dflux, alpha=0.5, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
   # the main function for running metal
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
+  # alpha: 0-1, determins the weights for to-be-changed reactions and steady reactions, 0.5 means equal weight, higher value means more weight for changed reactions
   # rxns are the indices or IDs or rxns to run metal on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
   # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
@@ -14,7 +15,7 @@ metal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=T
   # return both the metal.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result)
 
   # formulate metal model
-  metal.model <- form.metal(model, flux0, dflux)
+  metal.model <- form.metal(model, flux0, dflux, alpha)
 
   # solve the metal models
   if (!is.null(ko)) {
@@ -30,8 +31,8 @@ metal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=T
 
 ### --- helper functions for the individual internal steps of metal --- ###
 
-form.metal <- function(model, flux0, dflux) {
-  # formulate metal model (no extra parameters needed)
+form.metal <- function(model, flux0, dflux, alpha) {
+  # formulate metal model
 
   n.mets <- nrow(model$S)
   n.rxns <- ncol(model$S)
@@ -66,8 +67,8 @@ form.metal <- function(model, flux0, dflux) {
   fw0.b <- flux0>0 & dflux>0 | flux0==0 & dflux>0 & model$lb>=0
   ## reactions meant to change in the backward direction, excluding those in rvdn (i.e. w/o the potential to "overshoot")
   bk0.b <- flux0<0 & dflux>0 | flux0>0 & dflux<0 & model$lb>=0
-  w <- abs(dflux) / sum(abs(dflux), na.rm=TRUE) # weight
-  c <- c(ifelse(fw0.b, -w, ifelse(bk0.b, w, 0)), rep(1/n.st, 2*n.st), w[rvdn], w[rvdn])
+  w <- alpha * 100 * abs(dflux) / sum(abs(dflux), na.rm=TRUE) # weight
+  c <- c(ifelse(fw0.b, -w, ifelse(bk0.b, w, 0)), rep((1-alpha)*100/n.st, 2*n.st), w[rvdn], w[rvdn])
   c[is.na(c)] <- 0
 
   # things to keep for downstream analysis of MTA score
@@ -79,7 +80,7 @@ form.metal <- function(model, flux0, dflux) {
   fw.or.bk <- which(flux0==0 & dflux>0 & model$lb<0)
 
   # return MTA model
-  list(flux0=flux0, dflux=dflux, w=w,
+  list(flux0=flux0, dflux=dflux, alpha=alpha,
        fw0.b=fw0.b, bk0.b=bk0.b, rvdn.b=rvdn.b, fw=fw, bk=bk, fw.or.bk=fw.or.bk, st=st, n.st=n.st,
        rxns=model$rxns, mets=model$mets, csense="min", c=c, S=S, rowlb=rowlb, rowub=rowub, lb=lb, ub=ub)
 }
@@ -92,9 +93,9 @@ get.metal.score <- function(model, lp.out, detail, subset=NULL) {
   lp.out <- lp.out[[1]]
   if (length(lp.out$xopt)==1 && is.na(lp.out$xopt)) {
     if (detail) {
-      return(data.table(solv.stat=lp.out$stat, obj=NA, v.opt=NA, rxns.change.yes=NA, rxns.change.no=NA, advs.change.yes=NA, advs.change.no=NA, advs.steady=NA, score.change=NA, score.steady=NA, score.mta=NA))
+      return(data.table(solv.stat=lp.out$stat, obj=NA, v.opt=NA, rxns.change.yes=NA, rxns.change.no=NA, advs.change.yes=NA, advs.change.no=NA, advs.steady=NA, score.change=NA, score.steady=NA, score.metal=NA, score.mta=NA))
     } else {
-      return(data.table(solv.stat=lp.out$stat, obj=NA, score.change=NA, score.steady=NA, score.mta=NA))
+      return(data.table(solv.stat=lp.out$stat, obj=NA, score.change=NA, score.steady=NA, score.metal=NA, score.mta=NA))
     }
   }
   if (is.null(subset)) subset <- 1:length(model$flux0) else if (is.logical(subset)) subset <- which(subset)
@@ -129,25 +130,25 @@ get.metal.score <- function(model, lp.out, detail, subset=NULL) {
 
   # score for reactions intended to change
   fw.or.bk <- model$fw.or.bk[model$fw.or.bk %in% subset]
-  w <- abs(model$dflux) / sum(abs(model$dflux[subset]), na.rm=TRUE) # weight
+  w <- model$alpha * 100 * abs(model$dflux) / sum(abs(model$dflux[subset]), na.rm=TRUE) # weight
   s.ch <- sum(adv.yes * w[yes]) + sum(v[fw.or.bk] * w[fw.or.bk]) - sum(adv.no * w[no]) # score.yes - score.no
   # score for reactions intended to remain steady
   s.st.uw <- sum(adv.st) # un-weighted
-  s.st <- s.st.uw / length(st)
+  s.st <- s.st.uw * (1-model$alpha) * 100/length(st) # weighted
   # raw score: just the (negated) optimal objective value
   #s.raw <- -lp.out$obj
   # adjusted score
   #s.adj <- s.raw + sum(v0[model$bk] * model$w[model$bk]) - sum(v0[model$fw] * model$w[model$fw]) + sum(v[model$fw.or.bk] * model$w[model$fw.or.bk])
   # recalculated score (should be the same as the adjusted score) ## yes, same
-  #s.rec <- s.ch - s.st
+  s.rec <- s.ch - s.st
   # ratio score like the original mta
   s.mta <- s.ch / s.st
 
   # return
   if (detail) {
-    res <- data.table(solv.stat=lp.out$stat, obj=lp.out$obj, v.opt=list(v), rxns.change.yes=list(yes), rxns.change.no=list(no), advs.change.yes=list(adv.yes), advs.change.no=list(adv.no), advs.steady=list(adv.st), score.change=s.ch, score.steady=s.st, score.mta=s.mta)
+    res <- data.table(solv.stat=lp.out$stat, obj=lp.out$obj, v.opt=list(v), rxns.change.yes=list(yes), rxns.change.no=list(no), advs.change.yes=list(adv.yes), advs.change.no=list(adv.no), advs.steady=list(adv.st), score.change=s.ch, score.steady=s.st, score.metal=s.rec, score.mta=s.mta)
   } else {
-    res <- data.table(solv.stat=lp.out$stat, obj=lp.out$obj, score.change=s.ch, score.steady=s.st, score.mta=s.mta)
+    res <- data.table(solv.stat=lp.out$stat, obj=lp.out$obj, score.change=s.ch, score.steady=s.st, score.metal=s.rec, score.mta=s.mta)
   }
   res
 }
@@ -164,7 +165,7 @@ run.metal <- function(model, solv.pars, detail) {
 
 ### --- additional variations of metal --- ###
 
-mmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, n=1, seeds=1:n, detail=TRUE, solv.pars=list()) {
+mmetal <- function(model, flux0, dflux, alpha=0.5, rxns="all+ctrl", ko=NULL, nc=1L, n=1, seeds=1:n, detail=TRUE, solv.pars=list()) {
   # running multiple metal models including the original one, with the additional "control" models using: 1. dflux <- -dflux; 2. dflux <- a set of random orthogonal dflux vectors
   # n: the number of random orthogonal dflux vectors to generate (and thus the random metal models to run)
   # seeds: the seeds for generating the random orthogonal dflux vectors, its length is equal to n; or NULL meaning do not set seed
@@ -180,12 +181,12 @@ mmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, n=1, se
 
   # original model
   message("mmetal(): Running metal.")
-  res <- metal(model, flux0, dflux, rxns, ko, nc, detail, solv.pars)
+  res <- metal(model, flux0, dflux, alpha, rxns, ko, nc, detail, solv.pars)
 
   # control models
   ctrls <- sapply(1:length(dfs), function(i) {
     message("mmetal(): Running control #", i, ".")
-    res <- metal(model, flux0, dfs[[i]], rxns, ko, nc, detail=FALSE, solv.pars)
+    res <- metal(model, flux0, dfs[[i]], alpha, rxns, ko, nc, detail=FALSE, solv.pars)
     res$result$score.mta
   })
   med <- apply(ctrls, 1, median)
@@ -229,10 +230,11 @@ get.ortho.vec <- function(x, seed=NULL) {
   y
 }
 
-rmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, k=100, lp.pars=list(), qp.pars=list()) {
+rmetal <- function(model, flux0, dflux, alpha=0.5, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, k=100, lp.pars=list(), qp.pars=list()) {
   # the function for running a "robust" version of metal similary to rMTA (basically, rMTA with metal rather than the original MIQP version of MTA); k is the rMTA-specific parameter
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
+  # alpha: 0-1, determins the weights for to-be-changed reactions and steady reactions, 0.5 means equal weight, higher value means more weight for changed reactions
   # rxns are the indices or IDs or rxns to run MTA on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
   # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
@@ -240,8 +242,8 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=
   # return both the mta.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result.metal, result.moma, result.rmetal)
 
   # formulate metal model for either direction (dflux and -dflux)
-  metal.model <- form.metal(model, flux0, dflux)
-  metal.model0 <- form.metal(model, flux0, -dflux)
+  metal.model <- form.metal(model, flux0, dflux, alpha)
+  metal.model0 <- form.metal(model, flux0, -dflux, alpha)
 
   if (!is.null(ko)) {
     ko <- all2idx(model, ko)
@@ -265,16 +267,18 @@ rmetal <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=
   res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=qp.pars)
 
   # rMTA score
-  res <- data.table(id=res1$id, rxn=res1$rxn, bTS=res1$score.mta, wTS=res0$score.mta, mTS=res.moma$score.mta)
+  res <- data.table(id=res1$id, rxn=res1$rxn, bTS=res1$score.mta, wTS=res0$score.mta, mTS=res.moma$score.mta,
+                    bTS.metal=res1$score.metal, wTS.metal=res0$score.metal, mTS.metal=res.moma$score.metal)
   res[, rTS:=ifelse(bTS>0 & mTS>0 & wTS<0, k*mTS*(bTS-wTS), mTS)]
 
   list(metal.model=metal.model, result.metal=res1, result.moma=res.moma, result.rmetal=res)
 }
 
-mta.moma <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
+mta.moma <- function(model, flux0, dflux, alpha=0.5, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
   # the function for running mta based solely on moma
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
+  # alpha: 0-1, determins the weights for to-be-changed reactions and steady reactions, 0.5 means equal weight, higher value means more weight for changed reactions
   # rxns are the indices or IDs or rxns to run metal on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
   # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
@@ -282,7 +286,7 @@ mta.moma <- function(model, flux0, dflux, rxns="all+ctrl", ko=NULL, nc=1L, detai
   # return both the metal.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result)
 
   # formulate metal model; should not make any big difference if I used form.mta()
-  metal.model <- form.metal(model, flux0, dflux)
+  metal.model <- form.metal(model, flux0, dflux, alpha)
 
   # run MOMA
   tmpf <- function(x) get.metal.score(model=metal.model, x, detail=detail)
