@@ -274,23 +274,35 @@ rmetal <- function(model, flux0, dflux, alpha=0.5, rxns="all+ctrl", ko=NULL, nc=
   list(metal.model=metal.model, result.metal=res1, result.moma=res.moma, result.rmetal=res)
 }
 
-mta.moma <- function(model, flux0, dflux, alpha=0.5, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
+mta.moma <- function(model, flux0, dflux, use=c("metal","mta"), alpha=0.5, rxns="all+ctrl", ko=NULL, nc=1L, detail=TRUE, solv.pars=list()) {
   # the function for running mta based solely on moma
   # flux0 is the reference flux vector from sampling an iMAT output model
   # dflux is the flux change, i.e. output from de.dt2dflux(); I make it separate as usually we need to try different parameters in de.dt2dflux()
-  # alpha: 0-1, determins the weights for to-be-changed reactions and steady reactions, 0.5 means equal weight, higher value means more weight for changed reactions
+  # use: "metal" or "mta"; the scoring function will be different, other that this, they are the same
+  # alpha: 0-1, for "metal", determins the weights for to-be-changed reactions and steady reactions, 0.5 means equal weight, higher value means more weight for changed reactions
   # rxns are the indices or IDs or rxns to run metal on, by default all rxns plus the control wild-type model; rxns="all" to run for all rxns w/o the ctrl; if using indices, 0 means ctrl; if using IDs, "ctrl", means ctrl
   # ko: NULL; or rxn indices or IDs to KO to combine with those in rxns -- these KO's will be added before screening for those in rxns, but after the metal.model has been formed using the original wildtype model (this is the reasonable way since an existent KO may change the formalization)
   # nc: number of cores to use for rxns
   # detail: whether to return more details or only the MTA scores
   # return both the metal.model, and the summary data.table of MTA scores for the rxns, in a list(metal.model, result)
 
-  # formulate metal model; should not make any big difference if I used form.mta()
-  metal.model <- form.metal(model, flux0, dflux, alpha)
+  use <- match.arg(use)
 
-  # run MOMA
-  tmpf <- function(x) get.metal.score(model=metal.model, x, detail=detail)
-  res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=solv.pars)
+  if (use=="metal") {
+    # formulate metal/mta model
+    metal.model <- form.metal(model, flux0, dflux, alpha)
+    # run MOMA
+    tmpf <- function(x) get.metal.score(model=metal.model, x, detail=detail)
+    res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=solv.pars)
+    res <- list(metal.model=metal.model, result=res.moma)
+  } else if (use=="mta") {    
+    # formulate metal/mta model
+    mta.model <- form.mta(model, flux0, dflux, mta.pars=list())
+    # run MOMA
+    tmpf <- function(x) get.mta.score(model=mta.model, x, detail=detail)
+    res.moma <- moma(model, rxns, nc, flux0, obj=tmpf, solv.pars=solv.pars)
+    res <- list(mta.model=mta.model, result=res.moma)
+  }
 
-  list(metal.model=metal.model, result=res.moma)
+  res
 }
