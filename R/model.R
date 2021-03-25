@@ -3,7 +3,7 @@
 
 ### --- reading models from files --- ###
 
-read.matlab.model <- function(fn) {
+read.matlab.model <- function(fn, gene.rgx="[A-Za-z0-9_.-]+") {
   # read a model in the MATLAB (.mat) format
   # the resulting model is a list, and will contain a minimal set of necessary elements including:
   fields <- c("rxns", "mets", "S", "lb", "ub", "rowlb", "rowub", "genes", "rules", "c")
@@ -50,20 +50,21 @@ read.matlab.model <- function(fn) {
   }
 
   if ("grRules" %in% names(model) && !"rules" %in% names(model)) {
-    #gns.rgx <- paste(stringr::str_replace_all(model$gene.ids, "(\\W)", "\\\\\\1"), collapse="|") # this has a potential issue, e.g. "A|A1" will match only A and not A1
-    gns.rgx <- "[A-Za-z0-9_.]+"
+    #gene.rgx <- paste(stringr::str_replace_all(model$gene.ids, "(\\W)", "\\\\\\1"), collapse="|") # this has a potential issue, e.g. "A|A1" will match only A and not A1
     rules <- sapply(model$grRules, function(x) {
       if (is.na(x)) {
         x <- ""
       } else {
         x <- stringr::str_replace_all(x, " and ", " & ")
         x <- stringr::str_replace_all(x, " or ", " \\| ")
-        x <- stringr::str_replace_all(x, gns.rgx, function(x) paste0("x[", match(x, model$gene.ids), "]"))
+        x <- stringr::str_replace_all(x, gene.rgx, function(x) paste0("x[", match(x, model$gene.ids), "]"))
       }
       x
     })
     model$rules <- unname(rules)
   }
+
+  if (any(grepl("x\\[NA\\]", model$rules))) warning("model$rules contain x[NA], please check manually!")
 
   if (!"rowlb" %in% names(model) && !"rowub" %in% names(model)) {
     if ("b" %in% names(model)) {
