@@ -61,7 +61,7 @@ get.orth.pnts <- function(model, n, nc) {
     mat <- cbind(mat[, sample(2*n.rxns)], mat[, sample(2*n.rxns, n-2*n.rxns, replace=TRUE)])
   }
   message("1. Generating orthogonal points, progress:")
-  get.opt.pnts(model, mat)
+  get.opt.pnts(model, mat, nc)
 }
 
 get.rand.pnts <- function(model, n, nc) {
@@ -73,10 +73,10 @@ get.rand.pnts <- function(model, n, nc) {
   cs <- runif(n.rxns*n) - 0.5
   dim(cs) <- c(n.rxns, n)
   message("2. Generating random points, progress:")
-  get.opt.pnts(model, cs)
+  get.opt.pnts(model, cs, nc)
 }
 
-get.opt.pnts <- function(model, mat) {
+get.opt.pnts <- function(model, mat, nc) {
   # a helper function to get optimal points corresponding to running LPs with objective function coefficients being the columns of mat, for ACHR
 
   pb <- round(seq(0.1,0.9,by=0.1)*ncol(mat))
