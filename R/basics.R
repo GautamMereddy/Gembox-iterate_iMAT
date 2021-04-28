@@ -238,7 +238,18 @@ exprs2fluxes <- function(model, x, na.before=NA, na.after=0) {
     `|` <- function(a,b) max(a,b)
   }
 
-  res <- sapply(model$rules, function(i) if (i=="") NA else eval(parse(text=i)))
+  res <- sapply(1:length(model$rules), function(i) {
+    ri <- model$rules[i]
+    if (ri=="") {
+      return(NA)
+    } else {
+      return(tryCatch(eval(parse(text=ri)),
+        error=function(e) {
+          warning("Failed parsing rule #", i)
+          NA
+      }))
+    }
+  })
   res[is.na(res)] <- na.after
   res[model$rules==""] <- NA # still NA for rxns w/o genes
   unname(res)
@@ -271,7 +282,18 @@ de2dflux <- function(model, x, na.before=NA, na.after=0) {
     return(a+b) # all NA cases are undetermined and NA will be returned
   }
 
-  res <- sapply(model$rules, function(i) if (i=="") NA else eval(parse(text=i)))
+  res <- sapply(1:length(model$rules), function(i) {
+    ri <- model$rules[i]
+    if (ri=="") {
+      return(NA)
+    } else {
+      return(tryCatch(eval(parse(text=ri)),
+                      error=function(e) {
+                        warning("Failed parsing rule #", i)
+                        NA
+                      }))
+    }
+  })
   res[is.na(res)] <- na.after
   res[model$rules==""] <- NA # still NA for rxns w/o genes
   unname(res)
