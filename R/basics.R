@@ -470,10 +470,10 @@ set.rxn.bounds <- function(model, rxns, lbs=NULL, ubs=NULL, relative=FALSE, rel.
   rel.lb.mode <- match.arg(as.character(rel.lb.mode[1]), c("0","1"))
   x <- all2idx(model, rxns)
   if (relative) {
-    suppressMessages( vmaxs <- get.opt.fluxes(model, x, "max", nc, solv.pars) )
+    suppressMessages( vmaxs <- get.opt.fluxes(model=model, rxns=x, dir="max", nc=nc, solv.pars=solv.pars) )
     if (!is.null(lbs)) {
       if (rel.lb.mode=="0") {
-        suppressMessages( vmins <- get.opt.fluxes(model, x, "min", nc, solv.pars) )
+        suppressMessages( vmins <- get.opt.fluxes(model=model, rxns=x, dir="min", nc=nc, solv.pars=solv.pars) )
         model$lb[x] <- lbs * ifelse(vmins<0, vmins, vmaxs)
       } else if (rel.lb.mode=="1") model$lb[x] <- lbs * vmaxs
     }
@@ -505,8 +505,8 @@ set.required.rxns <- function(model, rxns, lbs, relative=TRUE) {
   } else rxns <- all2idx(model, rxns)
 
   if (length(lbs)==1) lbs <- rep(lbs, length(rxns))
-  if (relative) suppressMessages( lbs <- lbs * get.opt.fluxes(model, rxns, "max") )
-  suppressMessages( lbs0 <- get.opt.fluxes(model, rxns, "min") )
+  if (relative) suppressMessages( lbs <- lbs * get.opt.fluxes(model=model, rxns=rxns, dir="max") )
+  suppressMessages( lbs0 <- get.opt.fluxes(model=model, rxns=rxns, dir="min") )
   is.rev <- lbs0 < -lbs
   model$lb[rxns[!is.rev]] <- lbs[!is.rev]
   if (any(is.rev)) {
