@@ -1,8 +1,8 @@
 # gembox
 
-In-house toolbox for genome-scale metabolic modeling (GEM) for the Ruppin lab.
+In-house toolbox for genome-scale metabolic modeling (GEM) for the Ruppin lab. This is an R package that implements GEM functionalities.
 
-This is an R package that implements GEM functionalities.
+Provided as is without warranty of any kind.
 
 ### Current Functions
 
