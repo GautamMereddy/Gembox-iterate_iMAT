@@ -399,11 +399,11 @@ plot.model1 <- function(model, rxns, fluxes=rep(1, length(rxns)), dfluxes=rep(0,
 }
 
 
-plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control","Treated"), rxn.names=NULL, ylab="Reaction Rate", ylims=NULL, nr=1, use.fva=TRUE, nsamples=4e3) {
-  # plot flux distributions of two groups, given as group-specific models in model0 and model1
+plot.fluxes <- function(..., rxns, coefs=1, group.names=NULL, rxn.names=NULL, ylab="Reaction Rate", ylims=NULL, nr=1, use.fva=TRUE, nsamples=4e3) {
+  # plot flux distributions of multiple groups/samples, given as sample/group-specific models in ...
   # if sample points are available in the models, plot flux distribution with violin plots; if no sample points are available, plot lb and ub and their middle point (like a forest plot)
   # rxns and coefs: either vectors or lists (the latter is like get.diff.comb.flux); if more than one reaction, will plot in separate facets
-  # group.names: names of the two groups; rxn.names: names of rxns in order, if null will use rxn IDs or names(rxns) (if a list)
+  # group.names: names of the groups/samples corresponding to the order in ..., if NULL, set to 1:length(...); rxn.names: names of rxns in order, if null will use rxn IDs or names(rxns) (if a list)
   # ylab: y-axis title text; ylims: if not NULL, can be a vector c(ymin,ymax) or a list of such vectors corresponding to the order of rxns; some elements of the list can also be NULL, meaning not setting for the corresponding reaction
   # nr: number of rows if multiple facets
   # use.fva: whether to use lb/ub values computed by FVA if sample points are available
@@ -416,18 +416,21 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
   library(ggplot2)
   library(RColorBrewer)
   
+  models <- list(...)
+  if (is.null(group.names)) group.names <- 1:length(models)
+
   if (is.list(rxns)) {
-    rxns <- lapply(rxns, all2idx, model=model0)
+    rxns <- lapply(rxns, all2idx, model=models[[1]])
     if (is.null(names(rxns))) names(rxns) <- 1:length(rxns)
   } else {
-    rxns <- all2idx(model0, rxns)
-    names(rxns) <- model0$rxns[rxns]
+    rxns <- all2idx(models[[1]], rxns)
+    names(rxns) <- models[[1]]$rxns[rxns]
   }
   if (is.null(rxn.names)) rxn.names <- names(rxns)
   
-  s <- "sample" %in% names(model0) && "sample" %in% names(model1)
+  s <- all(sapply(models, function(x) "sample" %in% names(x)))
   if (!s || (s && use.fva)) {
-    fva.res <- df.fva(model0, model1, rxns, coefs, nc=1L, df.cutoff=1e-6)
+  	fva.res <- lapply(models, fva, rxns=rxns, coefs=coefs)
     # if FVA result range is outside of ylims, shrink it to ylims (otherwise the FVA bound point is removed and the plot won't display correctly or won't reflect the correct range of data)
     if (!is.null(ylims)) {
       if (is.list(ylims)) {
@@ -437,11 +440,13 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
         ymins <- ylims[1]
         ymaxs <- ylims[2]
       }
-      fva.res[, c("lb0","lb1","ub0","ub1"):=list(ifelse(is.na(ymins) | lb0>ymins,lb0,ymins), ifelse(is.na(ymins) | lb1>ymins,lb1,ymins), ifelse(is.na(ymaxs) | ub0<ymaxs,ub0,ymaxs), ifelse(is.na(ymaxs) | ub1<ymaxs,ub1,ymaxs))]
+      fva.res <- lapply(fva.res, function(x) x[, c("vmin","vmax"):=list(ifelse(is.na(ymins) | vmin>ymins,vmin,ymins), ifelse(is.na(ymaxs) | vmax<ymaxs,vmax,ymaxs))])
     }
   }
   if (s) {
-    tmpf <- function(m, i) {
+    tmpf <- function(i) {
+      m <- models[[i]]
+      if (use.fva) fr <- fva.res[[i]]
       ns <- ncol(m$sample$pnts)
       if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
       if (is.list(rxns)) {
@@ -451,21 +456,27 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
         if (!is.vector(x)) x <- t(x)
       }
       if (is.vector(x)) {
-        if (use.fva) res <- data.table(grp=group.names[i+1], rxn=rxn.names, v=c(x, fva.res[[paste0("lb",i)]], fva.res[[paste0("ub",i)]])) else res <- data.table(grp=group.names[i+1], rxn=rxn.names, v=x)
-        res1 <- data.table(grp=group.names[i+1], rxn=rxn.names, v=mean(x, na.rm=TRUE))
+        if (use.fva) res <- data.table(rxn=rxn.names, v=c(x, fr$vmin, fr$vmax)) else res <- data.table(rxn=rxn.names, v=x)
+        res1 <- data.table(rxn=rxn.names, v=mean(x, na.rm=TRUE))
       } else {
-        if (use.fva) res <- data.table(grp=group.names[i+1], rxn=c(rep(rxn.names,each=nsamples), rep(rxn.names,2)), v=c(x, fva.res[[paste0("lb",i)]], fva.res[[paste0("ub",i)]])) else res <- data.table(grp=group.names[i+1], rxn=rep(rxn.names,each=nsamples), v=c(x))
-        res1 <- data.table(grp=group.names[i+1], rxn=rxn.names, v=colMeans(x, na.rm=TRUE))
+        if (use.fva) res <- data.table(rxn=c(rep(rxn.names,each=nsamples), rep(rxn.names,2)), v=c(x, fr$vmin, fr$vmax)) else res <- data.table(rxn=rep(rxn.names,each=nsamples), v=c(x))
+        res1 <- data.table(rxn=rxn.names, v=colMeans(x, na.rm=TRUE))
       }
       list(res, res1)
     }
-    tmp <- tmpf(model0,0)
-    tmp1 <- tmpf(model1,1)
-    dat <- rbind(tmp[[1]], tmp1[[1]])
-    dat1 <- rbind(tmp[[2]], tmp1[[2]])
+
+    tmp <- 1:length(models)
+    names(tmp) <- group.names
+    tmp <- lapply(tmp, tmpf)
+    dat <- rbindlist(lapply(tmp, function(x) x[[1]]), idcol="grp")
+    dat1 <- rbindlist(lapply(tmp, function(x) x[[2]]), idcol="grp")
     dat1[, grp:=factor(grp, levels=group.names)]
     dat1[, rxn:=factor(rxn, levels=rxn.names)]
-  } else dat <- data.table(grp=rep(group.names, each=length(rxn.names)), rxn=rxn.names, v=fva.res[,c(mean0,mean1)], lb=fva.res[,c(lb0,lb1)], ub=fva.res[,c(ub0,ub1)])
+  } else {
+  	fr <- rbindlist(fva.res)
+  	fr[, ave:=(vmin+vmax)/2]
+  	dat <- data.table(grp=rep(group.names, each=length(rxn.names)), rxn=rxn.names, v=fr$ave, lb=fr$vmin, ub=fr$vmax)
+  }
   dat[, grp:=factor(grp, levels=group.names)]
   dat[, rxn:=factor(rxn, levels=rxn.names)]
 
@@ -481,11 +492,13 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
   blk[, grp:=factor(grp, levels=group.names)]
   blk[, rxn:=factor(rxn, levels=rxn.names)]
 
-  p <- ggplot(dat, aes(x=grp, y=v, color=grp, fill=grp)) + ylab(ylab) + geom_blank(data=blk, aes(y=vbnd))
+  p <- ggplot() + ylab(ylab) + geom_blank(data=blk, aes(y=vbnd))
   # if sample points are available, plot flux distribution with violin plots; if no sample points are available, plot lb and ub and their middle point (like a forest plot)
   if (s) {
-    p <- p + geom_violin(scale="width", width=0.6, color="grey20") + geom_point(data=dat1, aes(x=grp, y=v), size=1)
-  } else p <- p + geom_pointrange(aes(ymin=lb, ymax=ub), shape=21, fill="white")
+    p <- p +
+      geom_violin(data=dat, aes(x=grp, y=v, fill=grp), scale="width", width=0.6, color="grey20") +
+      geom_point(data=dat1, aes(x=grp, y=v, color=grp), size=1)
+  } else p <- p + geom_pointrange(data=dat, aes(x=grp, y=v, color=grp, ymin=lb, ymax=ub), shape=21, fill="white")
   if (length(rxn.names)>1) p <- p + facet_wrap(~rxn, scales="free_y", nrow=nr)
   p <- p +
     scale_color_brewer(palette="Set1") +
@@ -508,10 +521,10 @@ plot.fluxes2 <- function(model0, model1, rxns, coefs=1, group.names=c("Control",
 }
 
 
-plot.met.fluxes2 <- function(model0, model1, mets, group.names=c("Control","Treated"), met.names=NULL, ylab="Total Flux", ylims=NULL, nr=1, nsamples=4e3) {
-  # plot the distributions of total flux through metabolites of two groups, given as group-specific models in model0 and model1; sample points need to be in the models
+plot.met.fluxes <- function(..., mets, group.names=NULL, met.names=NULL, ylab="Total Flux", ylims=NULL, nr=1, nsamples=4e3) {
+  # plot the distributions of total flux through metabolites of multiple groups, given as group-specific models in ...; sample points need to be in the models
   # mets: metabolites; if more than one, will plot in separate facets
-  # group.names: names of the two groups; met.names: names of mets in order, if null will use mets IDs
+  # group.names: names of the groups in order, if null will use 1:length(...); met.names: names of mets in order, if null will use mets IDs
   # ylab: y-axis title text; ylims: if not NULL, can be a vector c(ymin,ymax) or a list of such vectors corresponding to the order of mets; some elements of the list can also be NULL, meaning not setting for the corresponding metabolite
   # nr: number of rows if multiple facets
   # nsamples: number of samples to use from the end of samples
@@ -523,24 +536,28 @@ plot.met.fluxes2 <- function(model0, model1, mets, group.names=c("Control","Trea
   library(ggplot2)
   library(RColorBrewer)
   
-  mets <- all2idx(model0, mets)
-  names(mets) <- model0$mets[mets]
+  models <- list(...)
+  if (is.null(group.names)) group.names <- 1:length(models)
+  names(models) <- group.names
+
+  mets <- all2idx(models[[1]], mets)
+  names(mets) <- models[[1]]$mets[mets]
   if (is.null(met.names)) met.names <- names(mets)
 
-  tmpf <- function(m, i) {
+  tmpf <- function(m) {
     ns <- ncol(m$sample$pnts)
     if (ns-nsamples<1e3) stop("At least ", nsamples+1e3, " samples needed.")
     x <- abs(m$S[mets,,drop=FALSE]) %*% abs(m$sample$pnts[, (ns-nsamples+1):ns]) / 2
-    res <- data.table(grp=group.names[i+1], met=rep(met.names,each=nsamples), v=as.vector(x))
-    res1 <- data.table(grp=group.names[i+1], met=met.names, v=Matrix::rowMeans(x, na.rm=TRUE))
+    res <- data.table(met=rep(met.names,nsamples), v=as.vector(x))
+    res1 <- data.table(met=met.names, v=Matrix::rowMeans(x, na.rm=TRUE))
     list(res, res1)
   }
-  tmp <- tmpf(model0,0)
-  tmp1 <- tmpf(model1,1)
-  dat <- rbind(tmp[[1]], tmp1[[1]])
+  
+  tmp <- lapply(models, tmpf)
+  dat <- rbindlist(lapply(tmp, function(x) x[[1]]), idcol="grp")
+  dat1 <- rbindlist(lapply(tmp, function(x) x[[2]]), idcol="grp")
   dat[, grp:=factor(grp, levels=group.names)]
   dat[, met:=factor(met, levels=met.names)]
-  dat1 <- rbind(tmp[[2]], tmp1[[2]])
   dat1[, grp:=factor(grp, levels=group.names)]
   dat1[, met:=factor(met, levels=met.names)]
   blk <- dat[, .(vbnd=c(1.1*min(v)-0.1*max(v), 1.1*max(v)-0.1*min(v)), grp=grp[1]), by=met]
@@ -556,11 +573,11 @@ plot.met.fluxes2 <- function(model0, model1, mets, group.names=c("Control","Trea
   blk[, grp:=factor(grp, levels=group.names)]
   blk[, met:=factor(met, levels=met.names)]
   
-  p <- ggplot(dat, aes(x=grp, y=v, color=grp, fill=grp)) + ylab(ylab)
+  p <- ggplot() + ylab(ylab) + geom_blank(data=blk, aes(y=vbnd)) +
+    geom_violin(data=dat, aes(x=grp, y=v, fill=grp), scale="width", width=0.6, color="grey20") +
+    geom_point(data=dat1, aes(x=grp, y=v, color=grp), size=1)
   if (length(met.names)>1) p <- p + facet_wrap(~met, scales="free_y", nrow=nr)
-  p <- p + geom_violin(scale="width", width=0.6, color="grey20") +
-    geom_point(data=dat1, aes(x=grp, y=v), size=1) +
-    geom_blank(data=blk, aes(y=vbnd)) +
+  p <- p +
     scale_color_brewer(palette="Set1") +
     scale_fill_brewer(palette="Pastel1") +
     theme_classic() +

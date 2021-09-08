@@ -30,34 +30,46 @@ get.opt.flux <- function(model, rxns="biomass", coefs=1, dir="max", ko=NULL, xop
 
 fba <- get.opt.flux # flux balance analysis as a synonym of get.opt.flux
 
-get.opt.fluxes <- function(model, rxns="all", dir="max", nc=1L, solv.pars=get.pars("lp", list())) {
-  # a wrapper around get.opt.flux for getting the min or max fluxes of multiple single reactions at once; return a named vector
-  # thus this function is not for optimizing linear combination of reactions; and the direction will be either min or max for all rxns; no xopt is returned
+get.opt.fluxes <- function(model, rxns="all", coefs=1, dir="max", nc=1L, solv.pars=get.pars("lp", list())) {
+  # a wrapper around get.opt.flux for getting the min or max fluxes of multiple reactions (or multiple linear combinations of reactions) at once (if rxns and coefs provide as lists, each element corresponds to a linear combination)
+  # return a named vector with names being the corresponding rxn ID as in model$rxns, or names(rxns) if rxns is provided as a list
 
-  if (length(rxns)==1 && rxns=="all") {
-    rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
-  } else rxns <- all2idx(model, rxns)
+  if (!is.list(rxns)) {
+    if (length(rxns)==1 && rxns=="all") {
+      rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
+    } else rxns <- all2idx(model, rxns)
+    names(rxns) <- model$rxns[rxns]
+    if (length(coefs)==1) coefs <- rep(coefs, length(rxns))
+  } else if (is.list(coefs)) {
+    rxns <- lapply(rxns, all2idx, model=model)
+  } else {
+    stop("If `rxns` is provided as a list, `coefs` should be a matched list as well.")
+  }
+  
   pb <- round(seq(0.1,0.9,by=0.1)*length(rxns))
   message("0%...", appendLF=FALSE)
   res <- unlist(parallel::mclapply(1:length(rxns), function(i) {
     a <- match(i,pb)
     if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
-    get.opt.flux(model=model, rxns=rxns[i], dir=dir, solv.pars=solv.pars)
+    get.opt.flux(model=model, rxns=rxns[[i]], coefs=coefs[[i]], dir=dir, solv.pars=solv.pars)
   }, mc.cores=nc))
   message("100%")
-  names(res) <- model$rxns[rxns]
+  names(res) <- names(rxns)
   res
 }
 
-fva <- function(model, rxns="all", nc=1L, biomass=NULL, biomass.rgx="biomass", solv.pars=get.pars("lp", list())) {
+fva <- function(model, rxns="all", coefs=1, nc=1L, biomass=NULL, biomass.rgx="biomass", solv.pars=get.pars("lp", list())) {
   # flux variability analysis, for rxns given as indices of IDs as in model$rxns; "all" for all rxns
+  # alternatively, can specify linear combinations of rxns by passing lists to rxns and coefs
   # biomass: whether to require minimal biomass; NULL for no constraint, or a number in [0,1] meaning requiring at least this fraction of max biomass
   # biomass.rgx: regex used to find the biomass reaction
   # return a named matrix with two columns "min" and "max", rxns in the rows
 
-  if (length(rxns)==1 && rxns=="all") {
-    rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
-  } else rxns <- all2idx(model, rxns)
+  if (!is.list(rxns)) {
+    if (length(rxns)==1 && rxns=="all") {
+      rxns <- 1:length(model$rxns) # I use model$rxns instead of ncol(S) since S can contain extra columns
+    } else rxns <- all2idx(model, rxns)
+  }
 
   if (!is.null(biomass)) {
     if (!is.numeric(biomass) || biomass<0 || biomass>1) stop("Invalid biomass requirement.")
@@ -65,15 +77,17 @@ fva <- function(model, rxns="all", nc=1L, biomass=NULL, biomass.rgx="biomass", s
     model <- set.rxn.bounds(model, bm.idx, lbs=biomass, relative=TRUE, nc=1L, solv.pars=solv.pars)
   }
   message("FVA: computing minimal fluxes, progress:")
-  min <- get.opt.fluxes(model, rxns, "min", nc, solv.pars)
+  min <- get.opt.fluxes(model, rxns, coefs, "min", nc, solv.pars)
   message("FVA: computing maximal fluxes, progress:")
-  max <- get.opt.fluxes(model, rxns, "max", nc, solv.pars)
+  max <- get.opt.fluxes(model, rxns, coefs, "max", nc, solv.pars)
   message("Done FVA.")
-  data.table(id=rxns, rxn=model$rxns[rxns], vmin=min, vmax=max)
+
+  if (is.list(rxns)) res <- data.table(id=names(rxns), vmin=min, vmax=max) else res <- data.table(id=rxns, rxn=model$rxns[rxns], vmin=min, vmax=max)
+  res
 }
 
-fva1 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FALSE, solv.pars=get.pars("lp", list())) {
-  # flux variability analysis after solving model, for rxns given as indices of IDs as in model$rxns; "all" for all rxns
+fva1 <- function(model, rxns="all", coefs=1, nc=1L, gap=NULL, agap=NULL, keep.solv.out=FALSE, solv.pars=get.pars("lp", list())) {
+  # flux variability analysis after solving model, for rxns given as indices of IDs as in model$rxns; "all" for all rxns; or specify combinations of rxns by passing lists to rxns and coefs
   # model is an arbitrary model, will first solve it to get the optimal objective value, then do FVA while requiring the objective function is at the optimal value, subject to a small margin as specified in gap and agap
   # gap and agap: relative and absolute margin for the optimal objective value constraint, i.e. |obj-obj.opt|<=agap AND |obj-obj.opt|<=|gap*obj.opt|, if one is NULL then that one is not used, default to both NULL means gap==agap==0
   # return same as fva(); but if keep.solv.out=TRUE, return list(fva.res, solver.out)
@@ -97,7 +111,7 @@ fva1 <- function(model, rxns="all", nc=1L, gap=NULL, agap=NULL, keep.solv.out=FA
 
   # forcing optimal objective value, do fva
   if (.pkg.var$solver=="rcplex") solv.pars$trace <- 0 else if (.pkg.var$solver=="gurobi") solv.pars$OutputFlag <- 0
-  res <- fva(model.opt, rxns=rxns, nc=nc, solv.pars=solv.pars)
+  res <- fva(model.opt, rxns=rxns, coefs=coefs, nc=nc, solv.pars=solv.pars)
 
   if (keep.solv.out) res <- list(fva.res=res, solver.out=solv.out[[1]])
   res
