@@ -46,14 +46,7 @@ get.opt.fluxes <- function(model, rxns="all", coefs=1, dir="max", nc=1L, solv.pa
     stop("If `rxns` is provided as a list, `coefs` should be a matched list as well.")
   }
   
-  pb <- round(seq(0.1,0.9,by=0.1)*length(rxns))
-  message("0%...", appendLF=FALSE)
-  res <- unlist(parallel::mclapply(1:length(rxns), function(i) {
-    a <- match(i,pb)
-    if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
-    get.opt.flux(model=model, rxns=rxns[[i]], coefs=coefs[[i]], dir=dir, solv.pars=solv.pars)
-  }, mc.cores=nc))
-  message("100%")
+  res <- unlist(pbmcapply::pbmclapply(1:length(rxns), function(i) get.opt.flux(model=model, rxns=rxns[[i]], coefs=coefs[[i]], dir=dir, solv.pars=solv.pars), mc.cores=nc))
   names(res) <- names(rxns)
   res
 }
@@ -159,17 +152,13 @@ run.ko.screen <- function(model, rxns="all+ctrl", f, ..., nc=1L, simplify=TRUE) 
 
   tmp <- 1:length(rxns)
   names(tmp) <- names(rxns)
-  pb <- round(seq(0.1,0.9,by=0.1)*length(rxns))
-  message("Begin KO screen, progress:\n0%...", appendLF=FALSE)
-  res <- parallel::mclapply(tmp, function(i) {
-    a <- match(i,pb)
-    if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
+  message("Begin KO screen, progress:")
+  res <- pbmcapply::pbmclapply(tmp, function(i) {
     m <- model
     m$lb[rxns[[i]]] <- 0 # if rxns[[i]]==0, lb will not be changed (i.e. the control)
     m$ub[rxns[[i]]] <- 0 # if rxns[[i]]==0, ub will not be changed (i.e. the control)
     f(m, ...)
   }, mc.cores=nc)
-  message("100%\nDone KO screen.")
 
   if (simplify) {
     if (any(!sapply(res, is.data.table))) {

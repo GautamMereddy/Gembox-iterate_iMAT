@@ -66,12 +66,9 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   	gr1 <- frank(gr, na.last="keep")
   	any.na <- apply(mat1, 2, anyNA)
   	idx <- which(!any.na)
-  	pb <- round(seq(0.1,0.9,by=0.1)*length(idx))
-    message("Running permutation tests, progress:\n0%...", appendLF=FALSE)
-  	cor.res <- rbindlist(parallel::mclapply(1:length(idx), function(i) {
+    message("Running permutation tests, progress:")
+  	cor.res <- rbindlist(pbmcapply::pbmclapply(1:length(idx), function(i) {
       tryCatch({
-      	a <- match(i,pb)
-        if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
   	    if (!is.null(seed)) set.seed(seed+i-1)
         a <- Rfast::permcor(mat1[,idx[i]], gr1, R=permut)
         data.table(rho=a["cor"], pval=a["p-value"])
@@ -79,7 +76,7 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
     }, mc.cores=nc))
     cor.res <- rbind(cbind(id=idx, cor.res), data.table(id=which(any.na), rho=NA, pval=NA))[order(id)]
   } else {
-  	cor.res <- rbindlist(parallel::mclapply(1:ncol(mat), function(i) {
+  	cor.res <- rbindlist(pbmcapply::pbmclapply(1:ncol(mat), function(i) {
       tryCatch({
         a <- cor.test(mat[,i], gr, method="spearman")
         data.table(rho=a$estimate, pval=a$p.value)
@@ -90,17 +87,13 @@ get.prime.rxns <- function(model, expr, gr, nc=1L, padj.cutoff=0.05, permut=0, s
   if (permut>0 && !use.rfast) {
   	mat1 <- apply(mat, 2, frank, na.last="keep")
   	gr1 <- frank(gr, na.last="keep")
-  	pb <- round(seq(0.1,0.9,by=0.1)*permut)
-    message("Running permutation tests, progress:\n0%...", appendLF=FALSE)
-  	tmp <- do.call(cbind, parallel::mclapply(1:permut, function(i) {
-  	  a <- match(i,pb)
-      if (!is.na(a)) message(a*10, "%...", appendLF=FALSE)
+    message("Running permutation tests, progress:")
+  	tmp <- do.call(cbind, pbmcapply::pbmclapply(1:permut, function(i) {
   	  if (!is.null(seed)) set.seed(seed+i-1)
   	  x <- sample(gr1)
   	  abs(cor(mat1, x))>=abs(cor.res$rho) # return logical to save some space
   	}, mc.cores=nc))
   	cor.res[, pval:=(rowSums(tmp)+1)/(permut+1)]
-  	message("100%")
   }
   
   cor.res[, padj:=p.adjust(pval,"BH")]

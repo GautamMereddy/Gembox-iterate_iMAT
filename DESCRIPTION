@@ -14,7 +14,8 @@ Depends:
     data.table
 Imports:
     stringr,
-    parallel
+    parallel,
+    pbmcapply
 LinkingTo:
     Rcpp,
     RcppArmadillo
