@@ -21,7 +21,7 @@ Provided as is without warranty of any kind.
 * ILOG CPLEX Optimization Studio or Gurobi (free academic licenses available)
 * R packages
   - Depends: Matrix, data.table  
-  - Imports: stringr, parallel  
+  - Imports: stringr, parallel, pbmcapply  
   - LinkingTo: Rcpp, RcppArmadillo  
   - Suggests: Rcplex2 (ruppinlab/Rcplex2), gurobi, R.matlab, sybilSBML, rlist, fgsea, igraph, ggplot2, RColorBrewer, visNetwork, hypergraph, hyperdraw
   - At least one of Rcplex2 (ruppinlab/Rcplex2) and gurobi is required for running optimizations
