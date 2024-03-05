@@ -1,4 +1,4 @@
-# Gembox - Iterative iMAT Pipeline?
+# Gembox - Iterative iMAT Pipeline
 
 In-house toolbox for genome-scale metabolic modeling (GEM) for the Ruppin lab. This is an R package that implements GEM functionalities.
 
