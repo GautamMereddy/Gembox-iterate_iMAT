@@ -1,4 +1,4 @@
-# gembox
+# What is Gembox?
 
 In-house toolbox for genome-scale metabolic modeling (GEM) for the Ruppin lab. This is an R package that implements GEM functionalities.
 
